@@ -7,22 +7,22 @@ package types
 // called 'UnlockConditions'.
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/rivine/rivine/crypto"
-	"github.com/rivine/rivine/encoding"
+	"golang.org/x/crypto/ed25519"
 )
 
 var (
 	// These Specifiers enumerate the types of signatures that are recognized
 	// by this implementation. If a signature's type is unrecognized, the
-	// signature is treated as valid. Signatures using the special "entropy"
-	// type are always treated as invalid; see Consensus.md for more details.
-	SignatureEntropy = Specifier{'e', 'n', 't', 'r', 'o', 'p', 'y'}
+	// signature is treated as invalid.
 	SignatureEd25519 = Specifier{'e', 'd', '2', '5', '5', '1', '9'}
+
+	ErrMissingTransactionSignature = errors.New("transaction misses a signature")
+	ErrInvalidSignatureAlgorithm   = errors.New("invalid signature algorithm")
+	ErrInvalidTransactionSignature = errors.New("invalid transaction signature")
 
 	ErrEntropyKey                = errors.New("transaction tries to sign an entproy public key")
 	ErrFrivolousSignature        = errors.New("transaction contains a frivolous signature")
@@ -34,359 +34,107 @@ var (
 	ErrSortedUniqueViolation     = errors.New("sorted unique violation")
 	ErrUnlockHashWrongLen        = errors.New("marshalled unlock hash is the wrong length")
 	ErrWholeTransactionViolation = errors.New("covered fields violation")
-
-	// FullCoveredFields is a covered fileds object where the
-	// 'WholeTransaction' field has been set to true. The primary purpose of
-	// this variable is syntactic sugar.
-	FullCoveredFields = CoveredFields{WholeTransaction: true}
 )
 
 type (
-	// CoveredFields indicates which fields in a transaction have been covered by
-	// the signature. (Note that the signature does not sign the fields
-	// themselves, but rather their combined hash; see SigHash.) Each slice
-	// corresponds to a slice in the Transaction type, indicating which indices of
-	// the slice have been signed. The indices must be valid, i.e. within the
-	// bounds of the slice. In addition, they must be sorted and unique.
-	//
-	// As a convenience, a signature of the entire transaction can be indicated by
-	// the 'WholeTransaction' field. If 'WholeTransaction' == true, all other
-	// fields must be empty (except for the Signatures field, since a signature
-	// cannot sign itself).
-	CoveredFields struct {
-		WholeTransaction      bool     `json:"wholetransaction"`
-		CoinInputs            []uint64 `json:"coininputs"`
-		CoinOutputs           []uint64 `json:"coinoutputs"`
-		BlockStakeInputs      []uint64 `json:"blockstakeinputs"`
-		BlockStakeOutputs     []uint64 `json:"blockstakeoutputs"`
-		MinerFees             []uint64 `json:"minerfees"`
-		ArbitraryData         bool     `json:"arbitrarydata"`
-		TransactionSignatures []uint64 `json:"transactionsignatures"`
-	}
 
-	// A SiaPublicKey is a public key prefixed by a Specifier. The Specifier
+	// A CryptoPublicKey is a public key prefixed by a Specifier. The Specifier
 	// indicates the algorithm used for signing and verification. Unrecognized
 	// algorithms will always verify, which allows new algorithms to be added to
 	// the protocol via a soft-fork.
-	SiaPublicKey struct {
+	CryptoPublicKey struct {
 		Algorithm Specifier `json:"algorithm"`
 		Key       []byte    `json:"key"`
 	}
-
-	// A TransactionSignature is a signature that is included in the transaction.
-	// The signature should correspond to a public key in one of the
-	// UnlockConditions of the transaction. This key is specified first by
-	// 'ParentID', which specifies the UnlockConditions, and then
-	// 'PublicKeyIndex', which indicates the key in the UnlockConditions. There
-	// are three types that use UnlockConditions: SiacoinInputs, SiafundInputs,
-	// and FileContractTerminations. Each of these types also references a
-	// ParentID, and this is the hash that 'ParentID' must match. The 'Timelock'
-	// prevents the signature from being used until a certain height.
-	// 'CoveredFields' indicates which parts of the transaction are being signed;
-	// see CoveredFields.
-	TransactionSignature struct {
-		ParentID       crypto.Hash   `json:"parentid"`
-		PublicKeyIndex uint64        `json:"publickeyindex"`
-		Timelock       BlockHeight   `json:"timelock"`
-		CoveredFields  CoveredFields `json:"coveredfields"`
-		Signature      []byte        `json:"signature"`
-	}
-
-	// UnlockConditions are a set of conditions which must be met to execute
-	// certain actions, such as spending a SiacoinOutput or terminating a
-	// FileContract.
-	//
-	// The simplest requirement is that the block containing the UnlockConditions
-	// must have a height >= 'Timelock'.
-	//
-	// 'PublicKeys' specifies the set of keys that can be used to satisfy the
-	// UnlockConditions; of these, at least 'SignaturesRequired' unique keys must sign
-	// the transaction. The keys that do not need to use the same cryptographic
-	// algorithm.
-	//
-	// If 'SignaturesRequired' == 0, the UnlockConditions are effectively "anyone can
-	// unlock." If 'SignaturesRequired' > len('PublicKeys'), then the UnlockConditions
-	// cannot be fulfilled under any circumstances.
-	UnlockConditions struct {
-		PublicKeys         []SiaPublicKey `json:"publickeys"`
-		SignaturesRequired uint64         `json:"signaturesrequired"`
-	}
-
-	// Each input has a list of public keys and a required number of signatures.
-	// inputSignatures keeps track of which public keys have been used and how many
-	// more signatures are needed.
-	inputSignatures struct {
-		remainingSignatures uint64
-		possibleKeys        []SiaPublicKey
-		usedKeys            map[uint64]struct{}
-		index               int
-	}
 )
 
-// Ed25519PublicKey returns pk as a SiaPublicKey, denoting its algorithm as
+// Ed25519PublicKey returns pk as a CryptoPublicKey,
+// denoting its algorithm as
 // Ed25519.
-func Ed25519PublicKey(pk crypto.PublicKey) SiaPublicKey {
-	return SiaPublicKey{
+func Ed25519PublicKey(pk crypto.PublicKey) CryptoPublicKey {
+	return CryptoPublicKey{
 		Algorithm: SignatureEd25519,
 		Key:       pk[:],
 	}
 }
 
-// UnlockHash calculates the root hash of a Merkle tree of the
-// UnlockConditions object. The leaves of this tree are formed by taking the
-// hash of the timelock, the hash of the public keys (one leaf each), and the
-// hash of the number of signatures. The keys are put in the middle because
-// Timelock and SignaturesRequired are both low entropy fields; they can bee
-// protected by having random public keys next to them.
-func (uc UnlockConditions) UnlockHash() UnlockHash {
-	tree := crypto.NewTree()
-	for i := range uc.PublicKeys {
-		tree.PushObject(uc.PublicKeys[i])
-	}
-	tree.PushObject(uc.SignaturesRequired)
-	return UnlockHash(tree.Root())
+// SignatureAlgorithm defines an algorithm used for creating a signature,
+// given a privateKey and input message.
+type SignatureAlgorithm interface {
+	Sign(privateKey, message []byte) []byte
+	Verify(publicKey, message, signature []byte) bool
 }
 
-// SigHash returns the hash of the fields in a transaction covered by a given
-// signature. See CoveredFields for more details.
-func (t Transaction) SigHash(i int) (hash crypto.Hash) {
-	cf := t.TransactionSignatures[i].CoveredFields
-	h := crypto.NewHash()
-	enc := encoding.NewEncoder(h)
-	if cf.WholeTransaction {
-		enc.EncodeAll(
-			t.CoinInputs,
-			t.CoinOutputs,
-			t.BlockStakeInputs,
-			t.BlockStakeOutputs,
-			t.MinerFees,
-			t.ArbitraryData,
-			t.TransactionSignatures[i].ParentID,
-			t.TransactionSignatures[i].PublicKeyIndex,
-			t.TransactionSignatures[i].Timelock,
-		)
-	} else {
-		for _, input := range cf.CoinInputs {
-			enc.Encode(t.CoinInputs[input])
-		}
-		for _, output := range cf.CoinOutputs {
-			enc.Encode(t.CoinOutputs[output])
-		}
-		for _, blockstakeInput := range cf.BlockStakeInputs {
-			enc.Encode(t.BlockStakeInputs[blockstakeInput])
-		}
-		for _, blockstakeOutput := range cf.BlockStakeOutputs {
-			enc.Encode(t.BlockStakeOutputs[blockstakeOutput])
-		}
-		for _, minerFee := range cf.MinerFees {
-			enc.Encode(t.MinerFees[minerFee])
-		}
-		if cf.ArbitraryData {
-			enc.Encode(t.ArbitraryData)
-		}
-	}
+// _RegisteredSignatureAlgorithms contains all registered/known signature algorithms
+var _RegisteredSignatureAlgorithms = map[Specifier]SignatureAlgorithm{}
 
-	for _, sig := range cf.TransactionSignatures {
-		enc.Encode(t.TransactionSignatures[sig])
+// RegisterSignatureAlgorithm allows you to register a non-nil signature algorithm,
+// effectively associating an algorithm to a specifier.
+func RegisterSignatureAlgorithm(specifier Specifier, algo SignatureAlgorithm) {
+	if algo == nil {
+		panic("cannot register nil SignFunc")
 	}
-
-	h.Sum(hash[:0])
-	return
+	_RegisteredSignatureAlgorithms[specifier] = algo
 }
 
-// sortedUnique checks that 'elems' is sorted, contains no repeats, and that no
-// element is larger than or equal to 'max'.
-func sortedUnique(elems []uint64, max int) bool {
-	if len(elems) == 0 {
-		return true
-	}
-
-	biggest := elems[0]
-	for _, elem := range elems[1:] {
-		if elem <= biggest {
-			return false
-		}
-		biggest = elem
-	}
-	if biggest >= uint64(max) {
-		return false
-	}
-	return true
+// UnregisterSignatureAlgorithm allows you to unregister a non-nil signature algorithm,
+// effectively disassociating an algorithm from a specifier.
+func UnregisterSignatureAlgorithm(specifier Specifier) {
+	delete(_RegisteredSignatureAlgorithms, specifier)
 }
 
-// validCoveredFields makes sure that all covered fields objects in the
-// signatures follow the rules. This means that if 'WholeTransaction' is set to
-// true, all fields except for 'Signatures' must be empty. All fields must be
-// sorted numerically, and there can be no repeats.
-func (t Transaction) validCoveredFields() error {
-	for _, sig := range t.TransactionSignatures {
-		// convenience variables
-		cf := sig.CoveredFields
-		fieldMaxs := []struct {
-			field []uint64
-			max   int
-		}{
-			{cf.CoinInputs, len(t.CoinInputs)},
-			{cf.CoinOutputs, len(t.CoinOutputs)},
-			{cf.BlockStakeInputs, len(t.BlockStakeInputs)},
-			{cf.BlockStakeOutputs, len(t.BlockStakeOutputs)},
-			{cf.MinerFees, len(t.MinerFees)},
-			{cf.TransactionSignatures, len(t.TransactionSignatures)},
-		}
+// Ed25519SignatureAlgorithm implements the ed25519 signature algorithm.
+type Ed25519SignatureAlgorithm struct{}
 
-		// Check that all fields are empty if 'WholeTransaction' is set, except
-		// for the Signatures field which isn't affected.
-		if cf.WholeTransaction {
-			// 'WholeTransaction' does not check signatures.
-			for _, fieldMax := range fieldMaxs[:len(fieldMaxs)-1] {
-				if len(fieldMax.field) != 0 {
-					return ErrWholeTransactionViolation
-				}
-			}
-		}
-
-		// Check that all fields are sorted, and without repeat values, and
-		// that all elements point to objects that exists within the
-		// transaction. If there are repeats, it means a transaction is trying
-		// to sign the same object twice. This is unncecessary, and opens up a
-		// DoS vector where the transaction asks the verifier to verify many GB
-		// of data.
-		for _, fieldMax := range fieldMaxs {
-			if !sortedUnique(fieldMax.field, fieldMax.max) {
-				return ErrSortedUniqueViolation
-			}
-		}
+// Sign implements SignatureAlgorithm.Sign
+func (e Ed25519SignatureAlgorithm) Sign(privateKey, message []byte) []byte {
+	if len(privateKey) != ed25519.PrivateKeySize {
+		panic("invalid private key size")
 	}
+	return ed25519.Sign(
+		ed25519.PrivateKey(privateKey),
+		message)
+}
 
-	return nil
+// Verify implements SignatureAlgorithm.Verify
+func (e Ed25519SignatureAlgorithm) Verify(publicKey, message, signature []byte) bool {
+	if len(publicKey) != ed25519.PublicKeySize {
+		panic("invalid public key size")
+	}
+	return ed25519.Verify(
+		ed25519.PublicKey(publicKey),
+		message,
+		signature)
 }
 
 // validSignatures checks the validaty of all signatures in a transaction.
-func (t *Transaction) validSignatures(currentHeight BlockHeight) error {
-	// Check that all covered fields objects follow the rules.
-	err := t.validCoveredFields()
-	if err != nil {
-		return err
+func (t *Transaction) validSignature() error {
+	if len(t.Signature) == 0 {
+		return ErrMissingTransactionSignature
+	}
+	algo, found := _RegisteredSignatureAlgorithms[t.PublicKey.Algorithm]
+	if !found {
+		return ErrInvalidSignatureAlgorithm
+	}
+	message := crypto.HashAll(
+		t.CoinInputs,
+		t.CoinOutputs,
+		t.BlockStakeInputs,
+		t.BlockStakeOutputs,
+		t.MinerFees,
+		t.ArbitraryData,
+		t.PublicKey,
+	)
+	if !algo.Verify(t.PublicKey.Key, message[:], t.Signature) {
+		return ErrInvalidTransactionSignature
 	}
 
-	// Create the inputSignatures object for each input.
-	sigMap := make(map[crypto.Hash]*inputSignatures)
-	for i, input := range t.CoinInputs {
-		id := crypto.Hash(input.ParentID)
-		_, exists := sigMap[id]
-		if exists {
-			return ErrDoubleSpend
-		}
-
-		sigMap[id] = &inputSignatures{
-			remainingSignatures: input.UnlockConditions.SignaturesRequired,
-			possibleKeys:        input.UnlockConditions.PublicKeys,
-			usedKeys:            make(map[uint64]struct{}),
-			index:               i,
-		}
-	}
-	for i, input := range t.BlockStakeInputs {
-		id := crypto.Hash(input.ParentID)
-		_, exists := sigMap[id]
-		if exists {
-			return ErrDoubleSpend
-		}
-
-		sigMap[id] = &inputSignatures{
-			remainingSignatures: input.UnlockConditions.SignaturesRequired,
-			possibleKeys:        input.UnlockConditions.PublicKeys,
-			usedKeys:            make(map[uint64]struct{}),
-			index:               i,
-		}
-	}
-
-	// Check all of the signatures for validity.
-	for i, sig := range t.TransactionSignatures {
-		// Check that sig corresponds to an entry in sigMap.
-		inSig, exists := sigMap[crypto.Hash(sig.ParentID)]
-		if !exists || inSig.remainingSignatures == 0 {
-			return ErrFrivolousSignature
-		}
-		// Check that sig's key hasn't already been used.
-		_, exists = inSig.usedKeys[sig.PublicKeyIndex]
-		if exists {
-			return ErrPublicKeyOveruse
-		}
-		// Check that the public key index refers to an existing public key.
-		if sig.PublicKeyIndex >= uint64(len(inSig.possibleKeys)) {
-			return ErrInvalidPubKeyIndex
-		}
-		// Check that the timelock has expired.
-		if sig.Timelock > currentHeight {
-			return ErrPrematureSignature
-		}
-
-		// Check that the signature verifies. Multiple signature schemes are
-		// supported.
-		publicKey := inSig.possibleKeys[sig.PublicKeyIndex]
-		switch publicKey.Algorithm {
-		case SignatureEntropy:
-			// Entropy cannot ever be used to sign a transaction.
-			return ErrEntropyKey
-
-		case SignatureEd25519:
-			// Decode the public key and signature.
-			var edPK crypto.PublicKey
-			err := encoding.Unmarshal([]byte(publicKey.Key), &edPK)
-			if err != nil {
-				return err
-			}
-			var edSig [crypto.SignatureSize]byte
-			err = encoding.Unmarshal([]byte(sig.Signature), &edSig)
-			if err != nil {
-				return err
-			}
-			cryptoSig := crypto.Signature(edSig)
-
-			sigHash := t.SigHash(i)
-			err = crypto.VerifyHash(sigHash, edPK, cryptoSig)
-			if err != nil {
-				return err
-			}
-
-		default:
-			// If the identifier is not recognized, assume that the signature
-			// is valid. This allows more signature types to be added via soft
-			// forking.
-		}
-
-		inSig.usedKeys[sig.PublicKeyIndex] = struct{}{}
-		inSig.remainingSignatures--
-	}
-
-	// Check that all inputs have been sufficiently signed.
-	for _, reqSigs := range sigMap {
-		if reqSigs.remainingSignatures != 0 {
-			return ErrMissingSignatures
-		}
-	}
-
-	return nil
-}
-
-// LoadString is the inverse of SiaPublicKey.String().
-func (spk *SiaPublicKey) LoadString(s string) {
-	parts := strings.Split(s, ":")
-	if len(parts) != 2 {
-		return
-	}
-	var err error
-	spk.Key, err = hex.DecodeString(parts[1])
-	if err != nil {
-		spk.Key = nil
-		return
-	}
-	copy(spk.Algorithm[:], []byte(parts[0]))
+	return nil // valid
 }
 
 // String defines how to print a SiaPublicKey - hex is used to keep things
 // compact during logging. The key type prefix and lack of a checksum help to
 // separate it from a sia address.
-func (spk *SiaPublicKey) String() string {
+func (spk *CryptoPublicKey) String() string {
 	return spk.Algorithm.String() + ":" + fmt.Sprintf("%x", spk.Key)
 }

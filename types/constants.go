@@ -10,6 +10,7 @@ import (
 	"math/big"
 
 	"github.com/rivine/rivine/build"
+	"github.com/rivine/rivine/crypto"
 )
 
 var (
@@ -80,19 +81,22 @@ func init() {
 		BlockCreatorFee = OneCoin.Mul64(100)
 
 		bso := BlockStakeOutput{
-			Value:      NewCurrency64(1000000),
-			UnlockHash: UnlockHash{},
+			Value:           NewCurrency64(1000000),
+			UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{}),
 		}
 
 		co := CoinOutput{
-			Value: OneCoin.Mul64(1000),
+			Value:           OneCoin.Mul64(1000),
+			UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{}),
 		}
 
 		// Seed for this address:
 		// goose twelve sleep arm wall hat sting sad picture garage lazy catch surround vote over arena next luxury tonight spatial avoid crack still feature
-		bso.UnlockHash.LoadString("3d3d2f93f754899eb790be4c521f58fd790de7901a83fbcef666c2671efc546d3e627782131e")
+		bso.UnlockCondition.Condition = []byte(
+			"3d3d2f93f754899eb790be4c521f58fd790de7901a83fbcef666c2671efc546d3e627782131e")
 		GenesisBlockStakeAllocation = append(GenesisBlockStakeAllocation, bso)
-		co.UnlockHash.LoadString("3d3d2f93f754899eb790be4c521f58fd790de7901a83fbcef666c2671efc546d3e627782131e")
+		co.UnlockCondition.Condition = []byte(
+			"3d3d2f93f754899eb790be4c521f58fd790de7901a83fbcef666c2671efc546d3e627782131e")
 		GenesisCoinDistribution = append(GenesisCoinDistribution, co)
 
 	} else if build.Release == "testing" {
@@ -120,16 +124,16 @@ func init() {
 
 		GenesisBlockStakeAllocation = []BlockStakeOutput{
 			{
-				Value:      NewCurrency64(2000),
-				UnlockHash: UnlockHash{214, 166, 197, 164, 29, 201, 53, 236, 106, 239, 10, 158, 127, 131, 20, 138, 63, 221, 230, 16, 98, 247, 32, 77, 210, 68, 116, 12, 241, 89, 27, 223},
+				Value:           NewCurrency64(2000),
+				UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{214, 166, 197, 164, 29, 201, 53, 236, 106, 239, 10, 158, 127, 131, 20, 138, 63, 221, 230, 16, 98, 247, 32, 77, 210, 68, 116, 12, 241, 89, 27, 223}),
 			},
 			{
-				Value:      NewCurrency64(7000),
-				UnlockHash: UnlockHash{209, 246, 228, 60, 248, 78, 242, 110, 9, 8, 227, 248, 225, 216, 163, 52, 142, 93, 47, 176, 103, 41, 137, 80, 212, 8, 132, 58, 241, 189, 2, 17},
+				Value:           NewCurrency64(7000),
+				UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{209, 246, 228, 60, 248, 78, 242, 110, 9, 8, 227, 248, 225, 216, 163, 52, 142, 93, 47, 176, 103, 41, 137, 80, 212, 8, 132, 58, 241, 189, 2, 17}),
 			},
 			{
-				Value:      NewCurrency64(1000),
-				UnlockHash: UnlockConditions{}.UnlockHash(),
+				Value:           NewCurrency64(1000),
+				UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{}),
 			},
 		}
 	} else if build.Release == "standard" {
@@ -202,17 +206,20 @@ func init() {
 		BlockCreatorFee = OneCoin.Mul64(10)
 
 		bso := BlockStakeOutput{
-			Value:      NewCurrency64(1000000),
-			UnlockHash: UnlockHash{},
+			Value:           NewCurrency64(1000000),
+			UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{}),
 		}
 
 		co := CoinOutput{
-			Value: OneCoin.Mul64(100 * 1000 * 1000),
+			Value:           OneCoin.Mul64(100 * 1000 * 1000),
+			UnlockCondition: NewSignatureUnlockCondition(crypto.PublicKey{}),
 		}
 
-		bso.UnlockHash.LoadString("b5e42056ef394f2ad9b511a61cec874d25bebe2095682dd37455cbafed4bec15c28ee7d7ed1d")
+		bso.UnlockCondition.Condition = crypto.PublicKey([]byte(
+			"b5e42056ef394f2ad9b511a61cec874d25bebe2095682dd37455cbafed4bec15c28ee7d7ed1d"))
 		GenesisBlockStakeAllocation = append(GenesisBlockStakeAllocation, bso)
-		co.UnlockHash.LoadString("b5e42056ef394f2ad9b511a61cec874d25bebe2095682dd37455cbafed4bec15c28ee7d7ed1d")
+		co.UnlockCondition = []byte(
+			"b5e42056ef394f2ad9b511a61cec874d25bebe2095682dd37455cbafed4bec15c28ee7d7ed1d")
 		GenesisCoinDistribution = append(GenesisCoinDistribution, co)
 	}
 

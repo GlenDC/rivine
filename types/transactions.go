@@ -76,23 +76,24 @@ type (
 	// but transactions cannot spend outputs that they create or otherwise be
 	// self-dependent.
 	Transaction struct {
-		CoinInputs            []CoinInput            `json:"coininputs"`
-		CoinOutputs           []CoinOutput           `json:"coinoutputs"`
-		BlockStakeInputs      []BlockStakeInput      `json:"blockstakeinputs"`
-		BlockStakeOutputs     []BlockStakeOutput     `json:"blockstakeoutputs"`
-		MinerFees             []Currency             `json:"minerfees"`
-		ArbitraryData         []byte                 `json:"arbitrarydata"`
-		TransactionSignatures []TransactionSignature `json:"transactionsignatures"`
+		CoinInputs        []CoinInput        `json:"coininputs"`
+		CoinOutputs       []CoinOutput       `json:"coinoutputs"`
+		BlockStakeInputs  []BlockStakeInput  `json:"blockstakeinputs"`
+		BlockStakeOutputs []BlockStakeOutput `json:"blockstakeoutputs"`
+		MinerFees         []Currency         `json:"minerfees"`
+		ArbitraryData     []byte             `json:"arbitrarydata"`
+		PublicKey         CryptoPublicKey    `json:"publicKey"` // public key of the sender
+		Signature         []byte             `json:"signature"`
 	}
 
-	// A SiacoinInput consumes a SiacoinOutput and adds the siacoins to the set of
-	// siacoins that can be spent in the transaction. The ParentID points to the
+	// CoinInput consumes a CoinInput and adds the coins to the set of
+	// coins that can be spent in the transaction. The ParentID points to the
 	// output that is getting consumed, and the UnlockConditions contain the rules
 	// for spending the output. The UnlockConditions must match the UnlockHash of
 	// the output.
 	CoinInput struct {
-		ParentID         CoinOutputID     `json:"parentid"`
-		UnlockConditions UnlockConditions `json:"unlockconditions"`
+		ParentID          CoinOutputID      `json:"parentid"`
+		UnlockFulfillment UnlockFulfillment `json:"unlockfulfillment`
 	}
 
 	// A CoinOutput holds a volume of siacoins. Outputs must be spent
@@ -100,8 +101,8 @@ type (
 	// UnlockHash is the hash of the UnlockConditions that must be fulfilled
 	// in order to spend the output.
 	CoinOutput struct {
-		Value      Currency   `json:"value"`
-		UnlockHash UnlockHash `json:"unlockhash"`
+		Value           Currency        `json:"value"`
+		UnlockCondition UnlockCondition `json:"unlockcondition`
 	}
 
 	// A BlockStakeInput consumes a BlockStakeOutput and adds the blockstakes to the set of
@@ -110,8 +111,8 @@ type (
 	// for spending the output. The UnlockConditions must match the UnlockHash of
 	// the output.
 	BlockStakeInput struct {
-		ParentID         BlockStakeOutputID `json:"parentid"`
-		UnlockConditions UnlockConditions   `json:"unlockconditions"`
+		ParentID          BlockStakeOutputID `json:"parentid"`
+		UnlockFulfillment UnlockFulfillment  `json:"unlockfulfillment`
 	}
 
 	// A BlockStakeOutput holds a volume of blockstakes. Outputs must be spent
@@ -119,8 +120,8 @@ type (
 	// UnlockHash is the hash of a set of UnlockConditions that must be fulfilled
 	// in order to spend the output.
 	BlockStakeOutput struct {
-		Value      Currency   `json:"value"`
-		UnlockHash UnlockHash `json:"unlockhash"`
+		Value           Currency        `json:"value"`
+		UnlockCondition UnlockCondition `json:"unlockcondition`
 	}
 
 	// UnspentBlockStakeOutput groups the BlockStakeOutputID, the block height, the transaction index, the output index and the value
@@ -128,7 +129,21 @@ type (
 		BlockStakeOutputID BlockStakeOutputID
 		Indexes            BlockStakeOutputIndexes
 		Value              Currency
-		UnlockHash         UnlockHash
+		UnlockCondition    UnlockCondition
+	}
+
+	// UnlockCondition defines the conditions in order to lock some output,
+	// which will need to be unlocked before usable as input.
+	UnlockCondition struct {
+		Type      UnlockType `json:"unlocktype"`
+		Condition []byte     `json:"unlockcondtion"`
+	}
+
+	// UnlockFulfillment is used to fulfill a given condition
+	// in order to unlock the output using that conditon.
+	UnlockFulfillment struct {
+		Type        UnlockType `json:"unlocktype"`
+		Fulfillment []byte     `json:"unlockfulfillment"`
 	}
 
 	// BlockStakeOutputIndexes groups the block height, the transaction index and the output index to uniquely identify a blockstake output.
@@ -140,6 +155,25 @@ type (
 	}
 )
 
+// ComputeSignature computes the Signature of this transaction, signed with the given privateKey,
+// using the algorithm specified by the public key.
+func (t Transaction) ComputeSignature(privateKey []byte) []byte {
+	algo, found := _RegisteredSignatureAlgorithms[t.PublicKey.Algorithm]
+	if !found {
+		panic("unknown signature algorithm")
+	}
+	message := crypto.HashAll(
+		t.CoinInputs,
+		t.CoinOutputs,
+		t.BlockStakeInputs,
+		t.BlockStakeOutputs,
+		t.MinerFees,
+		t.ArbitraryData,
+		t.PublicKey,
+	)
+	return algo.Sign(privateKey, message[:])
+}
+
 // ID returns the id of a transaction, which is taken by marshalling all of the
 // fields except for the signatures and taking the hash of the result.
 func (t Transaction) ID() TransactionID {
@@ -150,6 +184,8 @@ func (t Transaction) ID() TransactionID {
 		t.BlockStakeOutputs,
 		t.MinerFees,
 		t.ArbitraryData,
+		t.PublicKey,
+		t.Signature,
 	))
 }
 
@@ -166,6 +202,8 @@ func (t Transaction) CoinOutputID(i uint64) CoinOutputID {
 		t.BlockStakeOutputs,
 		t.MinerFees,
 		t.ArbitraryData,
+		t.PublicKey,
+		t.Signature,
 		i,
 	))
 }
@@ -183,6 +221,8 @@ func (t Transaction) BlockStakeOutputID(i uint64) BlockStakeOutputID {
 		t.BlockStakeOutputs,
 		t.MinerFees,
 		t.ArbitraryData,
+		t.PublicKey,
+		t.Signature,
 		i,
 	))
 }
@@ -213,7 +253,8 @@ func (t Transaction) MarshalSia(w io.Writer) error {
 		t.BlockStakeOutputs,
 		t.MinerFees,
 		t.ArbitraryData,
-		t.TransactionSignatures,
+		t.PublicKey,
+		t.Signature,
 	)
 }
 
@@ -233,7 +274,8 @@ func (t *Transaction) UnmarshalSia(r io.Reader) error {
 		&t.BlockStakeOutputs,
 		&t.MinerFees,
 		&t.ArbitraryData,
-		&t.TransactionSignatures,
+		&t.PublicKey,
+		&t.Signature,
 	)
 }
 

@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/rivine/rivine/build"
-	"github.com/rivine/rivine/crypto"
 	"github.com/rivine/rivine/modules"
 	"github.com/rivine/rivine/persist"
 	siasync "github.com/rivine/rivine/sync"
@@ -33,11 +32,11 @@ var (
 // spendableKey is a set of secret keys plus the corresponding unlock
 // conditions.  The public key can be derived from the secret key and then
 // matched to the corresponding public keys in the unlock conditions. All
-// addresses that are to be used in 'FundSiacoins' or 'FundSiafunds' in the
+// addresses that are to be used in 'FundCoins' or 'FundBlockS' in the
 // transaction builder must conform to this form of spendable key.
 type spendableKey struct {
-	UnlockConditions types.UnlockConditions
-	SecretKeys       []crypto.SecretKey
+	PublicKey  types.CryptoPublicKey
+	PrivateKey []byte
 }
 
 // Wallet is an object that tracks balances, creates keys and addresses,

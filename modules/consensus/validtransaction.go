@@ -17,6 +17,7 @@ var (
 	errSiacoinInputOutputMismatch    = errors.New("coin inputs do not equal coin outputs for transaction")
 	errBlockStakeInputOutputMismatch = errors.New("blockstake inputs do not equal blockstake outputs for transaction")
 	errWrongUnlockConditions         = errors.New("transaction contains incorrect unlock conditions")
+	errNonMatchingUnlockTypes        = errors.New("non matching unlock types")
 )
 
 // validCoins checks that the coin inputs and outputs are valid in the
@@ -37,8 +38,20 @@ func validCoins(tx *bolt.Tx, t types.Transaction) error {
 		if build.DEBUG && err != nil {
 			panic(err)
 		}
-		if sci.UnlockConditions.UnlockHash() != sco.UnlockHash {
-			return errWrongUnlockConditions
+
+		// check if unlock types match
+		if sci.UnlockType != sco.UnlockType {
+			return errNonMatchingUnlockTypes
+		}
+		// get unlocker (if possible) and try to unlock
+		unlocker, err := types.GetInputUnlocker(sci.UnlockType)
+		if err != nil {
+			return err
+		}
+		// TODO: what if we cannot unlock because it requires some manual input?!?!?!
+		err = unlocker.UnlockCoinInput(sci, sco)
+		if err != nil {
+			return err
 		}
 
 		inputSum = inputSum.Add(sco.Value)
@@ -61,9 +74,19 @@ func validBlockStakes(tx *bolt.Tx, t types.Transaction) (err error) {
 			return err
 		}
 
-		// Check the unlock conditions match the unlock hash.
-		if sfi.UnlockConditions.UnlockHash() != sfo.UnlockHash {
-			return errWrongUnlockConditions
+		// check if unlock types match
+		if sfi.UnlockType != sfo.UnlockType {
+			return errNonMatchingUnlockTypes
+		}
+		// get unlocker (if possible) and try to unlock
+		unlocker, err := types.GetInputUnlocker(sfi.UnlockType)
+		if err != nil {
+			return err
+		}
+		// TODO: what if we cannot unlock because it requires some manual input?!?!?!
+		err = unlocker.UnlockBlockstakeInput(sfi, sfo)
+		if err != nil {
+			return err
 		}
 
 		blockstakeInputSum = blockstakeInputSum.Add(sfo.Value)
@@ -82,7 +105,7 @@ func validBlockStakes(tx *bolt.Tx, t types.Transaction) (err error) {
 func validTransaction(tx *bolt.Tx, t types.Transaction) error {
 	// StandaloneValid will check things like signatures and properties that
 	// should be inherent to the transaction. (storage proof rules, etc.)
-	err := t.StandaloneValid(blockHeight(tx))
+	err := t.StandaloneValid()
 	if err != nil {
 		return err
 	}

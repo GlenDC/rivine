@@ -84,7 +84,7 @@ func (t Transaction) noRepeats() error {
 // context, for example if the same output is spent twice in the same
 // transaction. StandaloneValid will not check that all outputs being spent are
 // legal outputs, as it has no confirmed or unconfirmed set to look at.
-func (t Transaction) StandaloneValid(currentHeight BlockHeight) (err error) {
+func (t Transaction) StandaloneValid() (err error) {
 	err = t.fitsInABlock()
 	if err != nil {
 		return
@@ -97,7 +97,7 @@ func (t Transaction) StandaloneValid(currentHeight BlockHeight) (err error) {
 	if err != nil {
 		return
 	}
-	err = t.validSignatures(currentHeight)
+	err = t.validSignature()
 	if err != nil {
 		return
 	}

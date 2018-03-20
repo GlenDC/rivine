@@ -164,13 +164,6 @@ type (
 		// AddArbitraryData sets the arbitrary data of the transaction.
 		SetArbitraryData(arb []byte)
 
-		// AddTransactionSignature adds a transaction signature to the
-		// transaction, returning the index of the signature within the
-		// transaction. The signature should already be valid, and shouldn't
-		// sign any of the inputs that were added by calling 'FundCoins' or
-		// 'FundBlockStakes'.
-		AddTransactionSignature(types.TransactionSignature) uint64
-
 		// Sign will sign any inputs added by 'FundCoins' or 'FundBlockStakes'
 		// and return a transaction set that contains all parents prepended to
 		// the transaction. If more fields need to be added, a new transaction
@@ -186,7 +179,7 @@ type (
 		// sometimes even if the first call to Sign has failed. Sign should
 		// only ever be called once, and if the first signing fails, the
 		// transaction should be dropped.
-		Sign(wholeTransaction bool) ([]types.Transaction, error)
+		Sign() ([]types.Transaction, error)
 
 		// View returns the incomplete transaction along with all of its
 		// parents.
@@ -262,7 +255,7 @@ type (
 
 		// NextAddress returns a new coin addresses generated from the
 		// primary seed.
-		NextAddress() (types.UnlockConditions, error)
+		NextAddress() (types.CryptoPublicKey, error)
 
 		// CreateBackup will create a backup of the wallet at the provided
 		// filepath. The backup will have all seeds and keys.

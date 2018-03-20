@@ -59,7 +59,7 @@ func (w *Wallet) UnconfirmedBalance() (outgoingCoins types.Currency, incomingCoi
 // SendCoins creates a transaction sending 'amount' to 'dest'. If data is provided,
 // it is added as arbitrary data to the transaction. The transaction
 // is submitted to the transaction pool and is also returned.
-func (w *Wallet) SendCoins(amount types.Currency, dest types.UnlockHash, data []byte) ([]types.Transaction, error) {
+func (w *Wallet) SendCoins(amount types.Currency, unlockType types.UnlockType, unlockCondition, data []byte) ([]types.Transaction, error) {
 	if err := w.tg.Add(); err != nil {
 		return nil, err
 	}
@@ -67,8 +67,9 @@ func (w *Wallet) SendCoins(amount types.Currency, dest types.UnlockHash, data []
 
 	tpoolFee := types.OneCoin.Mul64(1) // TODO: better fee algo.
 	output := types.CoinOutput{
-		Value:      amount,
-		UnlockHash: dest,
+		Value:           amount,
+		UnlockType:      types.UnlockTypeSignature,
+		UnlockCondition: dest[:],
 	}
 
 	txnBuilder := w.StartTransaction()
