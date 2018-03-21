@@ -43,7 +43,7 @@ type (
 		// Unlock checks if the Input it lives in can be used (thus unlocked),
 		// within the context of the transaction it lives in, the defined UnlockConditions
 		// (defined by its UnlockHash) and the extra input parameters serializd as well.
-		Unlock(inputIndex uint64, tx Transaction) error
+		Unlock(inputIndex uint64, blockHeight BlockHeight, tx Transaction) error
 
 		// StrictCheck ensures that all conditions and unlock input params,
 		// are known and strict. This is useful as to make sure an input (and thus transaction)
@@ -59,6 +59,9 @@ type (
 		il InputLock
 	}
 
+	// TimeLock can be used to lock based on time or block height.
+	TimeLock Timestamp
+
 	// UnlockerConstructor is used to create a fresh unlocker.
 	UnlockerConstructor func() InputLock
 
@@ -66,6 +69,7 @@ type (
 	// It uses a public key (used as UnlockHash), such that only one public key is expected.
 	// The spender will need to proof ownership of that public key by providing a correct signature.
 	SingleSignatureInputLock struct {
+		TimeLock  TimeLock
 		PublicKey SiaPublicKey
 		Signature []byte
 	}
@@ -113,6 +117,22 @@ const (
 	// unlock type, while still preventing any possible type overwrite.
 	MaxStandardInputLockType = InputLockTypeSingleSignature
 )
+
+const (
+	// TimeLockMaxBlockHeight is used as the cut off point in a dynamic time lock.
+	// Meaning that prior to this value a time lock is to be concidered a blockheight,
+	// otherwise a timestamp.
+	TimeLockMaxBlockHeight = 1000000
+)
+
+// Unlocked returns true if the time lock is unlockable in the given context,
+// and it gives false otherwise.
+func (tl TimeLock) Unlocked(height BlockHeight) bool {
+	if tl < TimeLockMaxBlockHeight {
+		return height >= BlockHeight(tl)
+	}
+	return CurrentTimestamp() >= Timestamp(tl)
+}
 
 // NewInputLockProxy creates a new input lock proxy,
 // from a type and (existing) input lock.
@@ -168,15 +188,15 @@ func (p InputLockProxy) Lock(inputIndex uint64, tx Transaction, key interface{})
 		return err
 	}
 	// validate the locking was done correctly
-	return p.il.Unlock(inputIndex, tx)
+	return p.il.Unlock(inputIndex, 0, tx)
 }
 
 // Unlock implements InputLock.Unlock
-func (p InputLockProxy) Unlock(inputIndex uint64, tx Transaction) error {
+func (p InputLockProxy) Unlock(inputIndex uint64, blockHeight BlockHeight, tx Transaction) error {
 	if p.t == InputLockTypeNil {
 		return nil
 	}
-	return p.il.Unlock(inputIndex, tx)
+	return p.il.Unlock(inputIndex, blockHeight, tx)
 }
 
 // StrictCheck implements InputLock.StrictCheck
@@ -189,14 +209,20 @@ func (p InputLockProxy) StrictCheck() error {
 
 // NewSingleSignatureInputLock creates a new input lock,
 // using the given public key and signature.
-func NewSingleSignatureInputLock(pk SiaPublicKey) InputLockProxy {
+func NewSingleSignatureInputLock(pk SiaPublicKey, tl TimeLock) InputLockProxy {
 	return NewInputLockProxy(InputLockTypeSingleSignature,
-		&SingleSignatureInputLock{PublicKey: pk})
+		&SingleSignatureInputLock{
+			PublicKey: pk,
+			TimeLock:  tl,
+		})
 }
 
 // UnlockHash implements InputLock.UnlockHash
 func (ss *SingleSignatureInputLock) UnlockHash() UnlockHash {
-	return UnlockHash(crypto.HashObject(ss.PublicKey))
+	tree := crypto.NewTree()
+	tree.PushObject(ss.TimeLock)
+	tree.PushObject(ss.PublicKey)
+	return UnlockHash(tree.Root())
 }
 
 // Lock implements InputLock.Lock
@@ -211,7 +237,10 @@ func (ss *SingleSignatureInputLock) Lock(inputIndex uint64, tx Transaction, key 
 }
 
 // Unlock implements InputLock.Unlock
-func (ss *SingleSignatureInputLock) Unlock(inputIndex uint64, tx Transaction) error {
+func (ss *SingleSignatureInputLock) Unlock(inputIndex uint64, height BlockHeight, tx Transaction) error {
+	if !ss.TimeLock.Unlocked(height) {
+		return ErrPrematureSignature
+	}
 	return verifyHashUsingSiaPublicKey(ss.PublicKey, inputIndex, tx, ss.Signature)
 }
 
@@ -236,9 +265,12 @@ func NewAtomicSwapInputLock(s, r SiaPublicKey, hs AtomicSwapHashedSecret, tl Tim
 
 // UnlockHash implements InputLock.UnlockHash
 func (as *AtomicSwapInputLock) UnlockHash() UnlockHash {
-	return UnlockHash(crypto.HashAll(
-		as.Timelock, as.PublicKeyReceiver,
-		as.PublicKeySender, as.HashedSecret))
+	tree := crypto.NewTree()
+	tree.PushObject(as.Timelock)
+	tree.PushObject(as.PublicKeyReceiver)
+	tree.PushObject(as.PublicKeySender)
+	tree.PushObject(as.HashedSecret)
+	return UnlockHash(tree.Root())
 }
 
 // Lock implements InputLock.Lock
@@ -280,7 +312,7 @@ func (as *AtomicSwapInputLock) Lock(inputIndex uint64, tx Transaction, key inter
 }
 
 // Unlock implements InputLock.Unlock
-func (as *AtomicSwapInputLock) Unlock(inputIndex uint64, tx Transaction) error {
+func (as *AtomicSwapInputLock) Unlock(inputIndex uint64, _ BlockHeight, tx Transaction) error {
 	// prior to our timelock, only the receiver can claim the unspend output
 	if CurrentTimestamp() <= as.Timelock {
 		// TODO: integrate secret in sigHash

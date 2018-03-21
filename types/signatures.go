@@ -111,7 +111,7 @@ func (t *Transaction) validSignatures(currentHeight BlockHeight) (err error) {
 			return
 		}
 		spendCoins[ci.ParentID] = struct{}{}
-		err = ci.Unlocker.Unlock(uint64(index), *t)
+		err = ci.Unlocker.Unlock(uint64(index), currentHeight, *t)
 		if err != nil {
 			return
 		}
@@ -124,7 +124,7 @@ func (t *Transaction) validSignatures(currentHeight BlockHeight) (err error) {
 			return
 		}
 		spendBlockStakes[bsi.ParentID] = struct{}{}
-		err = bsi.Unlocker.Unlock(uint64(index), *t)
+		err = bsi.Unlocker.Unlock(uint64(index), currentHeight, *t)
 		if err != nil {
 			return
 		}

@@ -12,7 +12,7 @@ import (
 // and unmarshalled using JSON, the result is what is expected.
 func TestUnlockHashJSONMarshalling(t *testing.T) {
 	_, pk := crypto.GenerateKeyPair()
-	uc := NewSingleSignatureInputLock(Ed25519PublicKey(pk))
+	uc := NewSingleSignatureInputLock(Ed25519PublicKey(pk), 0)
 	uh := uc.UnlockHash()
 
 	// Marshal the unlock hash.
@@ -64,7 +64,7 @@ func TestUnlockHashJSONMarshalling(t *testing.T) {
 // is expected.
 func TestUnlockHashStringMarshalling(t *testing.T) {
 	_, pk := crypto.GenerateKeyPair()
-	uc := NewSingleSignatureInputLock(Ed25519PublicKey(pk))
+	uc := NewSingleSignatureInputLock(Ed25519PublicKey(pk), 0)
 	uh := uc.UnlockHash()
 
 	// Marshal the unlock hash.

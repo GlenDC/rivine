@@ -87,7 +87,7 @@ func (tb *transactionBuilder) FundCoins(amount types.Currency) error {
 		sci := types.CoinInput{
 			ParentID: scoid,
 			Unlocker: types.NewSingleSignatureInputLock(
-				types.Ed25519PublicKey(tb.wallet.keys[sco.UnlockHash].PublicKey)),
+				types.Ed25519PublicKey(tb.wallet.keys[sco.UnlockHash].PublicKey), 0),
 		}
 
 		tb.coinInputs = append(tb.coinInputs, len(tb.transaction.CoinInputs))
@@ -157,7 +157,7 @@ func (tb *transactionBuilder) FundBlockStakes(amount types.Currency) error {
 		sfi := types.BlockStakeInput{
 			ParentID: sfoid,
 			Unlocker: types.NewSingleSignatureInputLock(
-				types.Ed25519PublicKey(tb.wallet.keys[sfo.UnlockHash].PublicKey)),
+				types.Ed25519PublicKey(tb.wallet.keys[sfo.UnlockHash].PublicKey), 0),
 		}
 		tb.blockstakeInputs = append(tb.blockstakeInputs, len(tb.transaction.BlockStakeInputs))
 		tb.transaction.BlockStakeInputs = append(tb.transaction.BlockStakeInputs, sfi)
@@ -249,7 +249,7 @@ func (tb *transactionBuilder) SpendBlockStake(ubsoid types.BlockStakeOutputID) e
 	bsi := types.BlockStakeInput{
 		ParentID: ubsoid,
 		Unlocker: types.NewSingleSignatureInputLock(
-			types.Ed25519PublicKey(tb.wallet.keys[ubso.UnlockHash].PublicKey)),
+			types.Ed25519PublicKey(tb.wallet.keys[ubso.UnlockHash].PublicKey), 0),
 	}
 	tb.blockstakeInputs = append(tb.blockstakeInputs, len(tb.transaction.BlockStakeInputs))
 	tb.transaction.BlockStakeInputs = append(tb.transaction.BlockStakeInputs, bsi)

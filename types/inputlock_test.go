@@ -7,9 +7,37 @@ import (
 	"github.com/rivine/rivine/crypto"
 )
 
+func TestTimeLock(t *testing.T) {
+	testCases := []struct {
+		TimeLock    TimeLock
+		BlockHeight BlockHeight
+		Expected    bool
+	}{
+		{0, 0, true},
+		{42, 42, true},
+		{1, 0, false},
+		{100, 50, false},
+		{100, 100, true},
+		{500000, 500000, true},
+		{TimeLock(CurrentTimestamp()) - 10, 0, true},
+		{TimeLock(CurrentTimestamp()), 0, true},
+		{TimeLock(CurrentTimestamp()) + 10, 0, false},
+		{TimeLock(CurrentTimestamp()) - 10, 99999999999999, true},
+		{TimeLock(CurrentTimestamp()), 99999999999999, true},
+		{TimeLock(CurrentTimestamp()) + 10, 99999999999999, false},
+	}
+	for index, testCase := range testCases {
+		result := testCase.TimeLock.Unlocked(testCase.BlockHeight)
+		if result != testCase.Expected {
+			t.Errorf("#%d failed => (result) %v != %v (expected)",
+				index+1, result, testCase.Expected)
+		}
+	}
+}
+
 func TestSingleSignatureUnlocker(t *testing.T) {
 	sk, pk := crypto.GenerateKeyPair()
-	ul := NewSingleSignatureInputLock(Ed25519PublicKey(pk))
+	ul := NewSingleSignatureInputLock(Ed25519PublicKey(pk), 0)
 
 	err := ul.StrictCheck()
 	if err == nil {
@@ -22,7 +50,7 @@ func TestSingleSignatureUnlocker(t *testing.T) {
 		t.Error("inconsistent unlock hashes:", uh1, uh2)
 	}
 
-	err = ul.Unlock(0, Transaction{})
+	err = ul.Unlock(0, 0, Transaction{})
 	if err == nil {
 		t.Error("error was expected, nil received")
 	}
@@ -36,7 +64,7 @@ func TestSingleSignatureUnlocker(t *testing.T) {
 	if err != nil {
 		t.Errorf("strict check failed while it was expected to succeed: %v", err)
 	}
-	err = ul.Unlock(0, Transaction{})
+	err = ul.Unlock(0, 0, Transaction{})
 	if err != nil {
 		t.Errorf("unlock failed while it was expected to succeed: %v", err)
 	}
@@ -49,7 +77,7 @@ func TestSingleSignatureUnlocker(t *testing.T) {
 
 func TestSingleSignatureUnlockerBadTransaction(t *testing.T) {
 	sk, pk := crypto.GenerateKeyPair()
-	ul := NewSingleSignatureInputLock(Ed25519PublicKey(pk))
+	ul := NewSingleSignatureInputLock(Ed25519PublicKey(pk), 0)
 
 	tx := Transaction{}
 
@@ -57,24 +85,24 @@ func TestSingleSignatureUnlockerBadTransaction(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to lock transaction: %v", err)
 	}
-	err = ul.Unlock(0, tx)
+	err = ul.Unlock(0, 0, tx)
 	if err != nil {
 		t.Errorf("unlock failed while it was expected to succeed: %v", err)
 	}
 
 	tx.CoinInputs = append(tx.CoinInputs, CoinInput{
-		Unlocker: NewSingleSignatureInputLock(Ed25519PublicKey(pk)),
+		Unlocker: NewSingleSignatureInputLock(Ed25519PublicKey(pk), 0),
 	})
 	ul.il.(*SingleSignatureInputLock).Signature = nil
 	err = ul.Lock(0, tx, sk)
 	if err != nil {
 		t.Errorf("failed to lock transaction: %v", err)
 	}
-	err = ul.Unlock(0, tx)
+	err = ul.Unlock(0, 0, tx)
 	if err != nil {
 		t.Errorf("unlock failed while it was expected to succeed: %v", err)
 	}
-	err = ul.Unlock(0, Transaction{})
+	err = ul.Unlock(0, 0, Transaction{})
 	if err == nil {
 		t.Errorf("unlock should fail as transaction is wrong")
 	}
@@ -85,7 +113,7 @@ func TestSingleSignatureUnlockerBadTransaction(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to lock transaction: %v", err)
 	}
-	err = ul.Unlock(0, tx)
+	err = ul.Unlock(0, 0, tx)
 	if err != nil {
 		t.Errorf("unlock failed while it was expected to succeed: %v", err)
 	}
@@ -112,7 +140,7 @@ func TestAtomicSwapUnlocker(t *testing.T) {
 		t.Error("inconsistent unlock hashes:", uh1, uh2)
 	}
 
-	err = ul.Unlock(0, Transaction{})
+	err = ul.Unlock(0, 0, Transaction{})
 	if err == nil {
 		t.Error("error was expected, nil received")
 	}
@@ -163,7 +191,7 @@ func TestAtomicSwapUnlocker(t *testing.T) {
 	if err != nil {
 		t.Errorf("strict check failed while it was expected to succeed: %v", err)
 	}
-	err = ul.Unlock(0, Transaction{})
+	err = ul.Unlock(0, 0, Transaction{})
 	if err != nil {
 		t.Errorf("unlock failed while it was expected to succeed: %v", err)
 	}
