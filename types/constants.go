@@ -90,12 +90,11 @@ func init() {
 		}
 
 		// Seed for this address:
-		// carbon boss inject cover mountain fetch fiber fit tornado cloth wing dinosaur proof joy intact fabric thumb rebel borrow poet chair network expire else
-		bso.UnlockHash.LoadString("015a080a9259b9d4aaa550e2156f49b1a79a64c7ea463d810d4493e8242e679158b5b6a40c197f")
+		// three unknown fetch wing letter goose code quit shallow hazard endorse amateur secret waste crucial dose frame laundry romance tilt essay abstract ready record
+		bso.UnlockHash.LoadString("016e008f6b0f32bde49d67f85368c6d352c88809752f52fb051157436c122d9cf06b3b7a2899c8")
 		GenesisBlockStakeAllocation = append(GenesisBlockStakeAllocation, bso)
-		co.UnlockHash.LoadString("015a080a9259b9d4aaa550e2156f49b1a79a64c7ea463d810d4493e8242e679158b5b6a40c197f")
+		co.UnlockHash.LoadString("016e008f6b0f32bde49d67f85368c6d352c88809752f52fb051157436c122d9cf06b3b7a2899c8")
 		GenesisCoinDistribution = append(GenesisCoinDistribution, co)
-
 	} else if build.Release == "testing" {
 		// 'testing' settings are for automatic testing, and create much faster
 		// environments than a human can interact with.
