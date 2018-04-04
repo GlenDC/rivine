@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -39,6 +40,7 @@ func (g *Gateway) addNode(addr modules.NetAddress) error {
 		NetAddress:      addr,
 		WasOutboundPeer: false,
 	}
+	fmt.Println("add node @ ", addr, ":", g.nodes[addr])
 	return nil
 }
 
@@ -65,6 +67,7 @@ func (g *Gateway) removeNode(addr modules.NetAddress) error {
 	if _, exists := g.nodes[addr]; !exists {
 		return errors.New("no record of that node")
 	}
+	fmt.Println("delete node @ ", addr, ":", g.nodes[addr])
 	delete(g.nodes, addr)
 	return nil
 }

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -40,6 +41,7 @@ func (g *Gateway) load() error {
 		return g.loadv033persist()
 	}
 	for i := range nodes {
+		fmt.Println("load node @ ", nodes[i].NetAddress, ":", nodes[i])
 		g.nodes[nodes[i].NetAddress] = nodes[i]
 	}
 	return nil

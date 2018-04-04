@@ -171,10 +171,8 @@ func TestListen(t *testing.T) {
 	if err != nil {
 		t.Fatal("dial failed:", err)
 	}
-	var gID gatewayID
-	fastrand.Read(gID[:])
 	addr := modules.NetAddress(conn.LocalAddr().String())
-	ack, err := g.connectHandshake(conn, build.NewVersion(0, 0, 0), gID, g.myAddr, true)
+	ack, err := g.connectHandshake(conn, build.NewVersion(0, 1, 0), gatewayID{}, g.myAddr, true)
 	if err != errPeerRejectedConn {
 		t.Fatal(err)
 	}
@@ -189,34 +187,14 @@ func TestListen(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	// a simple 'conn.Close' would not obey the muxado disconnect protocol
-	newSmuxClient(conn).Close()
-
-	// compliant connect with invalid port
+	// compliant connect with fake netAddress
 	conn, err = net.Dial("tcp", string(g.Address()))
 	if err != nil {
 		t.Fatal("dial failed:", err)
 	}
-	addr = modules.NetAddress(conn.LocalAddr().String())
-	ack, err = g.connectHandshake(conn, build.Version, gID, g.myAddr, true)
-	if err != nil {
+	ack, err = g.connectHandshake(conn, build.Version, gatewayID{}, "fake", true)
+	if err != errPeerRejectedConn {
 		t.Fatal(err)
-	}
-	if ack.Version.Compare(build.Version) != 0 {
-		t.Fatal("gateway should have given ack")
-	}
-	err = connectPortHandshake(conn, "0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 10; i++ {
-		g.mu.RLock()
-		_, ok := g.peers[addr]
-		g.mu.RUnlock()
-		if ok {
-			t.Fatal("gateway should not have added a peer with an invalid port")
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 
 	// a simple 'conn.Close' would not obey the muxado disconnect protocol
@@ -228,17 +206,12 @@ func TestListen(t *testing.T) {
 		t.Fatal("dial failed:", err)
 	}
 	addr = modules.NetAddress(conn.LocalAddr().String())
-	ack, err = g.connectHandshake(conn, build.Version, gID, g.myAddr, true)
+	ack, err = g.connectHandshake(conn, build.Version, gatewayID{}, addr, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ack.Version.Compare(build.Version) != 0 {
 		t.Fatal("gateway should have given ack")
-	}
-
-	err = connectPortHandshake(conn, addr.Port())
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	// g should add the peer
@@ -722,11 +695,13 @@ func TestPeerManagerPriority(t *testing.T) {
 
 	// Connect g1 to g2. This will cause g2 to be saved as an outbound peer in
 	// g1's node list.
+	fmt.Println("(g1)", g1.Address(), "connects to (g2)", g2.Address())
 	if err := g1.Connect(g2.Address()); err != nil {
 		t.Fatal(err)
 	}
 	// Connect g3 to g1. This will cause g3 to be added to g1's node list, but
 	// not as an outbound peer.
+	fmt.Println("(g3)", g3.Address(), "connects to (g1)", g1.Address())
 	if err := g3.Connect(g1.Address()); err != nil {
 		t.Fatal(err)
 	}

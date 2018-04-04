@@ -2,6 +2,7 @@ package modules
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -114,6 +115,7 @@ func (na NetAddress) IsStdValid() error {
 	// Verify the port number.
 	host, port, err := net.SplitHostPort(string(na))
 	if err != nil {
+		fmt.Println("couldn't split :(", host, port, na, err)
 		return err
 	}
 	portInt, err := strconv.Atoi(port)

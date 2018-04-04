@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"fmt"
+
 	"github.com/NebulousLabs/fastrand"
 	"github.com/rivine/rivine/build"
 	"github.com/rivine/rivine/modules"
@@ -33,6 +35,7 @@ func (g *Gateway) managedPeerManagerConnect(addr modules.NetAddress) {
 			p.Inbound = false
 			if n, ok := g.nodes[p.NetAddress]; ok && !n.WasOutboundPeer {
 				n.WasOutboundPeer = true
+				fmt.Println("set outbound peer for node @ ", addr, "on true")
 				g.nodes[n.NetAddress] = n
 			}
 			g.log.Debugf("[PMC] [SUCCESS] [%v] existing peer has been converted to outbound peer", addr)
