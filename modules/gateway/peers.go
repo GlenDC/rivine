@@ -307,10 +307,12 @@ func (g *Gateway) connectHandshake(conn net.Conn, version build.ProtocolVersion,
 	// check if version is not the reject-version constant,
 	// a new feature to quit early, or simply quit ourselves, should the version be too low
 	if remoteInfo.Version.Compare(rejectedVersion) == 0 {
-		// static version that can be returned during the version handshake, as to indicate a rejection explicitly
+		// we're rejected, exit early!
 		err = errPeerRejectedConn
 		return
 	}
+
+	fmt.Println("connctor:", remoteInfo)
 	if remoteInfo.Version.Compare(minAcceptableVersion) < 0 {
 		// invalid version
 		err = insufficientVersionError(remoteInfo.Version.String())
@@ -332,9 +334,8 @@ func (g *Gateway) connectHandshake(conn net.Conn, version build.ProtocolVersion,
 		err = errOurAddress
 		return
 	}
-
 	// exit already, should the other side does not want a connection
-	if !wantConn {
+	if !theirs.WantConn {
 		err = errPeerNoConnWanted
 		return
 	}
@@ -433,7 +434,7 @@ func (g *Gateway) acceptConnHandshake(conn net.Conn, version build.ProtocolVersi
 	}
 
 	// write our version, as their info checks out
-	err = encoding.WriteObject(conn, build.Version)
+	err = encoding.WriteObject(conn, version)
 	if err != nil {
 		return
 	}
@@ -594,7 +595,6 @@ func (g *Gateway) managedConnect(addr modules.NetAddress) error {
 	g.log.Debugln("INFO: connected to new peer", addr)
 
 	// call initRPCs
-	g.mu.RLock()
 	for name, fn := range g.initRPCs {
 		go func(name string, fn modules.RPCFunc) {
 			if g.threads.Add() != nil {
@@ -608,7 +608,6 @@ func (g *Gateway) managedConnect(addr modules.NetAddress) error {
 			}
 		}(name, fn)
 	}
-	g.mu.RUnlock()
 
 	return nil
 }
@@ -637,12 +636,8 @@ func (g *Gateway) Disconnect(addr modules.NetAddress) error {
 	if !exists {
 		return errors.New("not connected to that node")
 	}
-	p.sess.Close()
 	g.mu.Lock()
-	// Peer is removed from the peer list as wellas the node list, to prevent
-	// the node from being re-connected while looking for a replacement peer.
 	delete(g.peers, addr)
-	delete(g.nodes, addr)
 	g.mu.Unlock()
 	if err := p.sess.Close(); err != nil {
 		return err
