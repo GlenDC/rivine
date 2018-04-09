@@ -60,12 +60,12 @@ type (
 	InputLock interface {
 		// Lock the current Input within the context of
 		// the transaction it exists in and its position in there.
-		Lock(inputIndex uint64, tx Transaction, key interface{}) error
+		Lock(inputIndex uint64, tx TransactionData, key interface{}) error
 
 		// Unlock checks if the Input it lives in can be used (thus unlocked),
 		// within the context of the transaction it lives in, the defined UnlockConditions
 		// (defined by its UnlockHash) and the extra input parameters serializd as well.
-		Unlock(inputIndex uint64, tx Transaction) error
+		Unlock(inputIndex uint64, tx TransactionData) error
 
 		// StrictCheck ensures that all conditions and unlock input params,
 		// are known and strict. This is useful as to make sure an input (and thus transaction)
@@ -403,7 +403,7 @@ func (p InputLockProxy) UnlockHash() UnlockHash {
 }
 
 // Lock implements InputLock.Lock
-func (p InputLockProxy) Lock(inputIndex uint64, tx Transaction, key interface{}) error {
+func (p InputLockProxy) Lock(inputIndex uint64, tx TransactionData, key interface{}) error {
 	if p.t == UnlockTypeNil {
 		return errors.New("nil input lock cannot be locked")
 	}
@@ -416,7 +416,7 @@ func (p InputLockProxy) Lock(inputIndex uint64, tx Transaction, key interface{})
 }
 
 // Unlock implements InputLock.Unlock
-func (p InputLockProxy) Unlock(inputIndex uint64, tx Transaction) error {
+func (p InputLockProxy) Unlock(inputIndex uint64, tx TransactionData) error {
 	if p.t == UnlockTypeNil {
 		return errors.New("nil input lock cannot be unlocked")
 	}
@@ -448,12 +448,12 @@ func (u *UnknownInputLock) Decode(rf RawInputLockFormat) error {
 }
 
 // Lock implements InputLock.Lock
-func (u *UnknownInputLock) Lock(_ uint64, _ Transaction, _ interface{}) error {
+func (u *UnknownInputLock) Lock(_ uint64, _ TransactionData, _ interface{}) error {
 	return ErrUnknownUnlockType // locking an unkown type is never valid
 }
 
 // Unlock implements InputLock.Unlock
-func (u *UnknownInputLock) Unlock(_ uint64, _ Transaction) error {
+func (u *UnknownInputLock) Unlock(_ uint64, _ TransactionData) error {
 	return nil // unlocking always passes for an unknown type
 }
 
@@ -505,7 +505,7 @@ func (ss *SingleSignatureInputLock) Decode(rf RawInputLockFormat) error {
 }
 
 // Lock implements InputLock.Lock
-func (ss *SingleSignatureInputLock) Lock(inputIndex uint64, tx Transaction, key interface{}) error {
+func (ss *SingleSignatureInputLock) Lock(inputIndex uint64, tx TransactionData, key interface{}) error {
 	if len(ss.Signature) != 0 {
 		return ErrUnlockConditionLocked
 	}
@@ -516,7 +516,7 @@ func (ss *SingleSignatureInputLock) Lock(inputIndex uint64, tx Transaction, key 
 }
 
 // Unlock implements InputLock.Unlock
-func (ss *SingleSignatureInputLock) Unlock(inputIndex uint64, tx Transaction) error {
+func (ss *SingleSignatureInputLock) Unlock(inputIndex uint64, tx TransactionData) error {
 	return verifyHashUsingSiaPublicKey(ss.PublicKey, inputIndex, tx, ss.Signature)
 }
 
@@ -625,7 +625,7 @@ func NewAtomicSwapInputLock(condition AtomicSwapCondition) InputLockProxy {
 }
 
 // Lock implements InputLock.Lock
-func (as *AtomicSwapInputLock) Lock(inputIndex uint64, tx Transaction, key interface{}) error {
+func (as *AtomicSwapInputLock) Lock(inputIndex uint64, tx TransactionData, key interface{}) error {
 	if len(as.Signature) != 0 {
 		return ErrUnlockConditionLocked
 	}
@@ -663,7 +663,7 @@ func (as *AtomicSwapInputLock) Lock(inputIndex uint64, tx Transaction, key inter
 }
 
 // Unlock implements InputLock.Unlock
-func (as *AtomicSwapInputLock) Unlock(inputIndex uint64, tx Transaction) error {
+func (as *AtomicSwapInputLock) Unlock(inputIndex uint64, tx TransactionData) error {
 	// create the unlockHash for the given public Key
 	unlockHash := NewSingleSignatureInputLock(as.PublicKey).UnlockHash()
 
@@ -766,7 +766,7 @@ func strictSignatureCheck(pk SiaPublicKey, signature []byte) error {
 	}
 }
 
-func signHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx Transaction, key interface{}, extraObjects ...interface{}) ([]byte, error) {
+func signHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx TransactionData, key interface{}, extraObjects ...interface{}) ([]byte, error) {
 	switch pk.Algorithm {
 	case SignatureEntropy:
 		// Entropy cannot ever be used to sign a transaction.
@@ -800,7 +800,7 @@ func signHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx Transactio
 	}
 }
 
-func verifyHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx Transaction, sig []byte, extraObjects ...interface{}) (err error) {
+func verifyHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx TransactionData, sig []byte, extraObjects ...interface{}) (err error) {
 	switch pk.Algorithm {
 	case SignatureEntropy:
 		// Entropy cannot ever be used to sign a transaction.

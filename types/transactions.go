@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 
 	"github.com/rivine/rivine/crypto"
 	"github.com/rivine/rivine/encoding"
@@ -66,7 +67,15 @@ type (
 	BlockStakeOutputID crypto.Hash
 	OutputID           crypto.Hash
 
-	// A Transaction is an atomic component of a block. Transactions can contain
+	// TransactionValidationContext is the context provided,
+	// as to validate a transaction within a blockchain-defined context.
+	TransactionValidationContext struct {
+		BlockHeight    BlockHeight
+		BlockSizeLimit uint64
+		Strict         bool
+	}
+
+	// Transaction is an atomic component of a block. Transactions can contain
 	// inputs and outputs and even arbitrary
 	// data. They can also contain signatures to prove that a given party has
 	// approved the transaction, or at least a particular subset of it.
@@ -74,15 +83,49 @@ type (
 	// Transactions can depend on other previous transactions in the same block,
 	// but transactions cannot spend outputs that they create or otherwise be
 	// self-dependent.
+	//
+	// The exact (encoded) structure of a transaction,
+	// and the rules that are used to validate it,
+	// depend upon the transaction's version.
 	Transaction struct {
-		CoinInputs        []CoinInput
-		CoinOutputs       []CoinOutput
-		BlockStakeInputs  []BlockStakeInput
-		BlockStakeOutputs []BlockStakeOutput
-		MinerFees         []Currency
-		ArbitraryData     []byte
+		version TransactionVersion
+		data    TransactionData
+	}
 
-		_VersionNumber TransactionVersion
+	// TransactionData is the interface used to represent all types of transaction data in memory.
+	// This allows each transaction version to have its own encoded/internal structure.
+	TransactionData interface {
+		// CoinInputs returns the coin inputs that the transaction data contains, if any.
+		CoinInputs() []CoinInput
+		// CoinOutputs returns the coin outputs that the transaction data contains, if any.
+		CoinOutputs() []CoinOutput
+
+		// BlockStakeInputs returns the block stake inputs that the transaction data contains, if any.
+		BlockStakeInputs() []BlockStakeInput
+		// BlockStakeOutputs returns the block stake outputs that the transaction data contains, if any.
+		BlockStakeOutputs() []BlockStakeOutput
+
+		// MinerFees returns the MinerFees the transaction data contains, if any.
+		MinerFees() []Currency
+
+		// ValidationTransaction validates the transaction (data), within the given context.
+		ValidateTransaction(ctx TransactionValidationContext) error
+
+		// InputSigHash computes the hash for a given input index, plus some extra objects.
+		//
+		// NOTE: only static parts of the transaction data should be taken into account,
+		// such that this signature hash is 100% determenistic.
+		InputSigHash(inputIndex uint64, extraObjects ...interface{}) (hash crypto.Hash, err error)
+
+		// each txn data has to implement Sia (Un)Marshaler,
+		// used for binary encoding as well as hash construction
+		encoding.SiaMarshaler
+		encoding.SiaUnmarshaler
+
+		// each txn data has to implementsJSON (Un)Marshaler,
+		// used for JSON encoding
+		json.Marshaler
+		json.Unmarshaler
 	}
 
 	// A CoinInput consumes a CoinInput and adds the coins to the set of
@@ -140,17 +183,44 @@ type (
 	}
 )
 
+// NewTransaction creates a new transaction, from a given version and data.
+// NOTE: if the given version and data do not match, this function will panic.
+func NewTransaction(version TransactionVersion, data TransactionData) Transaction {
+	if data == nil {
+		panic("no transaction data given")
+	}
+	// TODO: replace this check with a Register-based check
+	switch version {
+	case TransactionVersionOne:
+		if reflect.TypeOf(new(TransactionDataV0)) != reflect.TypeOf(data) {
+			panic("transactions with the initial lagacy version should be a created as a transactionV0")
+		}
+	default:
+		if reflect.TypeOf(new(RawTransactionData)) != reflect.TypeOf(data) {
+			panic("transactions with unknown versions should be a created as raw transactions")
+		}
+	}
+	return Transaction{
+		version: version,
+		data:    data,
+	}
+}
+
 // ID returns the id of a transaction, which is taken by marshalling all of the
 // fields except for the signatures and taking the hash of the result.
 func (t Transaction) ID() TransactionID {
-	return TransactionID(crypto.HashAll(
-		t.CoinInputs,
-		t.CoinOutputs,
-		t.BlockStakeInputs,
-		t.BlockStakeOutputs,
-		t.MinerFees,
-		t.ArbitraryData,
-	))
+	hash := crypto.HashObject(t.data)
+	return TransactionID(hash)
+}
+
+// CoinInputs returns the coin inputs that the transaction data contains, if any.
+func (t Transaction) CoinInputs() []CoinInput {
+	return t.data.CoinInputs()
+}
+
+// CoinOutputs returns the coin outputs that the transaction data contains, if any.
+func (t Transaction) CoinOutputs() []CoinOutput {
+	return t.data.CoinOutputs()
 }
 
 // CoinOutputID returns the ID of a coin output at the given index,
@@ -160,14 +230,19 @@ func (t Transaction) ID() TransactionID {
 func (t Transaction) CoinOutputID(i uint64) CoinOutputID {
 	return CoinOutputID(crypto.HashAll(
 		SpecifierCoinOutput,
-		t.CoinInputs,
-		t.CoinOutputs,
-		t.BlockStakeInputs,
-		t.BlockStakeOutputs,
-		t.MinerFees,
-		t.ArbitraryData,
+		t.data,
 		i,
 	))
+}
+
+// BlockStakeInputs returns the block stake inputs that the transaction data contains, if any.
+func (t Transaction) BlockStakeInputs() []BlockStakeInput {
+	return t.data.BlockStakeInputs()
+}
+
+// BlockStakeOutputs returns the block stake outputs that the transaction data contains, if any.
+func (t Transaction) BlockStakeOutputs() []BlockStakeOutput {
+	return t.data.BlockStakeOutputs()
 }
 
 // BlockStakeOutputID returns the ID of a BlockStakeOutput at the given index, which
@@ -177,12 +252,7 @@ func (t Transaction) CoinOutputID(i uint64) CoinOutputID {
 func (t Transaction) BlockStakeOutputID(i uint64) BlockStakeOutputID {
 	return BlockStakeOutputID(crypto.HashAll(
 		SpecifierBlockStakeOutput,
-		t.CoinInputs,
-		t.CoinOutputs,
-		t.BlockStakeInputs,
-		t.BlockStakeOutputs,
-		t.MinerFees,
-		t.ArbitraryData,
+		t.data,
 		i,
 	))
 }
@@ -190,79 +260,69 @@ func (t Transaction) BlockStakeOutputID(i uint64) BlockStakeOutputID {
 // CoinOutputSum returns the sum of all the coin outputs in the
 // transaction, which must match the sum of all the coin inputs.
 func (t Transaction) CoinOutputSum() (sum Currency) {
-	// Add the siacoin outputs.
-	for _, sco := range t.CoinOutputs {
-		sum = sum.Add(sco.Value)
+	for _, ci := range t.data.CoinOutputs() {
+		sum = sum.Add(ci.Value)
 	}
-
-	// Add the miner fees.
-	for _, fee := range t.MinerFees {
-		sum = sum.Add(fee)
+	for _, mf := range t.data.MinerFees() {
+		sum = sum.Add(mf)
 	}
-
 	return
+}
+
+// MinerFees returns the MinerFees the transaction data contains, if any.
+func (t Transaction) MinerFees() []Currency {
+	return t.data.MinerFees()
+}
+
+// ArbitraryData returns the ArbitraryData the transaction data contains, if any.
+func (t Transaction) ArbitraryData() []byte {
+	if af, ok := t.data.(interface {
+		ArbitraryData() []byte
+	}); ok {
+		return af.ArbitraryData()
+	}
+	return nil
+}
+
+// ValidationTransaction validates the transaction (data), within the given context.
+func (t Transaction) ValidateTransaction(ctx TransactionValidationContext) error {
+	return t.data.ValidateTransaction(ctx)
 }
 
 // MarshalSia implements the encoding.SiaMarshaler interface.
 func (t Transaction) MarshalSia(w io.Writer) error {
 	return encoding.NewEncoder(w).EncodeAll(
-		t._VersionNumber,
-		t.CoinInputs,
-		t.CoinOutputs,
-		t.BlockStakeInputs,
-		t.BlockStakeOutputs,
-		t.MinerFees,
-		t.ArbitraryData,
+		t.version,
+		t.data,
 	)
 }
 
 // UnmarshalSia implements the encoding.SiaUnmarshaler interface.
 func (t *Transaction) UnmarshalSia(r io.Reader) error {
-	decoder := encoding.NewDecoder(r)
-	err := decoder.Decode(&t._VersionNumber)
+	err := encoding.NewDecoder(r).Decode(&t.version)
 	if err != nil {
 		return err
 	}
-	if t._VersionNumber != TransactionVersionOne {
-		return ErrInvalidTransactionVersion
+
+	switch t.version {
+	case TransactionVersionOne:
+		t.data = new(TransactionDataV0)
+	default:
+		t.data = new(RawTransactionData)
 	}
-	return decoder.DecodeAll(
-		&t.CoinInputs,
-		&t.CoinOutputs,
-		&t.BlockStakeInputs,
-		&t.BlockStakeOutputs,
-		&t.MinerFees,
-		&t.ArbitraryData,
-	)
+	return t.data.UnmarshalSia(r)
 }
 
 // util structs to support some kind of json OneOf feature
 // as to make sure our data can support whatever versions we support
-type (
-	jsonTransaction struct {
-		Version TransactionVersion `json:"version"`
-		Data    json.RawMessage    `json:"data"`
-	}
-	jsonTransactionVersionOne struct {
-		CoinInputs        []CoinInput        `json:"coininputs"`
-		CoinOutputs       []CoinOutput       `json:"coinoutputs,omitempty"`
-		BlockstakeInputs  []BlockStakeInput  `json:"blockstakeinputs,omitempty"`
-		BlockStakeOutputs []BlockStakeOutput `json:"blockstakeoutputs,omitempty"`
-		MinerFees         []Currency         `json:"minerfees"`
-		ArbitraryData     []byte             `json:"arbitrarydata,omitempty"`
-	}
-)
+type jsonTransaction struct {
+	Version TransactionVersion `json:"version"`
+	Data    json.RawMessage    `json:"data"`
+}
 
 // MarshalJSON implements the json.Marshaler interface.
 func (t Transaction) MarshalJSON() ([]byte, error) {
-	data, err := json.Marshal(jsonTransactionVersionOne{
-		CoinInputs:        t.CoinInputs,
-		CoinOutputs:       t.CoinOutputs,
-		BlockstakeInputs:  t.BlockStakeInputs,
-		BlockStakeOutputs: t.BlockStakeOutputs,
-		MinerFees:         t.MinerFees,
-		ArbitraryData:     t.ArbitraryData,
-	})
+	data, err := t.data.MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
@@ -279,20 +339,20 @@ func (t *Transaction) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	if rawTx.Version != TransactionVersionOne {
-		return errors.New("invalid transaction version")
+
+	var data TransactionData
+	switch rawTx.Version {
+	case TransactionVersionOne:
+		data = new(TransactionDataV0)
+	default:
+		data = new(RawTransactionData)
 	}
-	var data jsonTransactionVersionOne
-	err = json.Unmarshal(rawTx.Data[:], &data)
+	err = data.UnmarshalJSON(rawTx.Data)
 	if err != nil {
 		return err
 	}
-	t.CoinInputs = data.CoinInputs
-	t.CoinOutputs = data.CoinOutputs
-	t.BlockStakeInputs = data.BlockstakeInputs
-	t.BlockStakeOutputs = data.BlockStakeOutputs
-	t.MinerFees = data.MinerFees
-	t.ArbitraryData = data.ArbitraryData
+
+	t.version, t.data = rawTx.Version, data
 	return nil
 }
 

@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/rivine/rivine/crypto"
-	"github.com/rivine/rivine/encoding"
 )
 
 var (
@@ -62,29 +61,8 @@ func Ed25519PublicKey(pk crypto.PublicKey) SiaPublicKey {
 
 // InputSigHash returns the hash of all fields in a transaction,
 // relevant to an input sig.
-func (t Transaction) InputSigHash(inputIndex uint64, extraObjects ...interface{}) (hash crypto.Hash) {
-	h := crypto.NewHash()
-	enc := encoding.NewEncoder(h)
-
-	enc.Encode(inputIndex)
-	if len(extraObjects) > 0 {
-		enc.EncodeAll(extraObjects...)
-	}
-	for _, ci := range t.CoinInputs {
-		enc.EncodeAll(ci.ParentID, ci.Unlocker.UnlockHash())
-	}
-	enc.Encode(t.CoinOutputs)
-	for _, bsi := range t.BlockStakeInputs {
-		enc.EncodeAll(bsi.ParentID, bsi.Unlocker.UnlockHash())
-	}
-	enc.EncodeAll(
-		t.BlockStakeOutputs,
-		t.MinerFees,
-		t.ArbitraryData,
-	)
-
-	h.Sum(hash[:0])
-	return
+func (t Transaction) InputSigHash(inputIndex uint64, extraObjects ...interface{}) crypto.Hash {
+	return t.data.InputSigHash(inputIndex, extraObjects...)
 }
 
 // sortedUnique checks that 'elems' is sorted, contains no repeats, and that no
@@ -105,37 +83,6 @@ func sortedUnique(elems []uint64, max int) bool {
 		return false
 	}
 	return true
-}
-
-// validSignatures checks the validaty of all signatures in a transaction.
-func (t *Transaction) validSignatures(currentHeight BlockHeight) (err error) {
-	spendCoins := make(map[CoinOutputID]struct{})
-	for index, ci := range t.CoinInputs {
-		if _, found := spendCoins[ci.ParentID]; found {
-			err = ErrDoubleSpend
-			return
-		}
-		spendCoins[ci.ParentID] = struct{}{}
-		err = ci.Unlocker.Unlock(uint64(index), *t)
-		if err != nil {
-			return
-		}
-	}
-
-	spendBlockStakes := make(map[BlockStakeOutputID]struct{})
-	for index, bsi := range t.BlockStakeInputs {
-		if _, found := spendBlockStakes[bsi.ParentID]; found {
-			err = ErrDoubleSpend
-			return
-		}
-		spendBlockStakes[bsi.ParentID] = struct{}{}
-		err = bsi.Unlocker.Unlock(uint64(index), *t)
-		if err != nil {
-			return
-		}
-	}
-
-	return
 }
 
 // LoadString is the inverse of SiaPublicKey.String().

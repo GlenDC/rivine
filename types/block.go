@@ -67,7 +67,7 @@ func (b Block) Header() BlockHeader {
 func (b Block) CalculateTotalMinerFees() Currency {
 	sum := NewCurrency64(0)
 	for _, txn := range b.Transactions {
-		for _, fee := range txn.MinerFees {
+		for _, fee := range txn.MinerFees() {
 			sum = sum.Add(fee)
 		}
 	}

@@ -256,12 +256,11 @@ func (c *ChainConstants) Validate() error {
 func (c *ChainConstants) GenesisBlock() Block {
 	return Block{
 		Timestamp: c.GenesisTimestamp,
-		Transactions: []Transaction{
-			{
-				BlockStakeOutputs: c.GenesisBlockStakeAllocation,
-				CoinOutputs:       c.GenesisCoinDistribution,
-			},
-		},
+		// for legacy reasons this will always return a transaction of the initial version
+		Transactions: []Transaction{NewTransactionV0(TransactionDataV0Config{
+			CoinOutputs:       c.GenesisCoinDistribution,
+			BlockStakeOutputs: c.GenesisBlockStakeAllocation,
+		})},
 	}
 }
 
