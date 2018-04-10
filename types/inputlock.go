@@ -133,12 +133,6 @@ type (
 		Signature ByteSlice `json:"signature"`
 	}
 
-	// AtomicSwapSecret defines the 256 pre-image byte slice,
-	// used as secret within the Atomic Swap protocol/contract.
-	AtomicSwapSecret [sha256.Size]byte
-	// AtomicSwapHashedSecret defines the 256 image byte slice,
-	// used as hashed secret within the Atomic Swap protocol/contract.
-	AtomicSwapHashedSecret [sha256.Size]byte
 	// AtomicSwapRefundKey defines the refund key pair used by
 	// the initiator/sender of such a contract.
 	AtomicSwapRefundKey struct {
@@ -166,21 +160,6 @@ type (
 		PublicKey        SiaPublicKey
 		Signature        ByteSlice
 		Secret           AtomicSwapSecret
-	}
-	// AtomicSwapCondition defines the condition of an atomic swap contract/input-lock.
-	// Only used for encoding purposes.
-	AtomicSwapCondition struct {
-		Sender       UnlockHash             `json:"sender"`
-		Receiver     UnlockHash             `json:"receiver"`
-		HashedSecret AtomicSwapHashedSecret `json:"hashedsecret"`
-		TimeLock     Timestamp              `json:"timelock"`
-	}
-	// AtomicSwapFulfillment defines the fulfillment of an atomic swap contract/input-lock.
-	// Only used for encoding purposes.
-	AtomicSwapFulfillment struct {
-		PublicKey SiaPublicKey     `json:"publickey"`
-		Signature ByteSlice        `json:"signature"`
-		Secret    AtomicSwapSecret `json:"secret"`
 	}
 )
 
@@ -747,84 +726,6 @@ func (as *AtomicSwapInputLock) Decode(rf RawInputLockFormat) error {
 // StrictCheck implements InputLock.StrictCheck
 func (as *AtomicSwapInputLock) StrictCheck() error {
 	return strictSignatureCheck(as.PublicKey, as.Signature)
-}
-
-func strictSignatureCheck(pk SiaPublicKey, signature []byte) error {
-	switch pk.Algorithm {
-	case SignatureEntropy:
-		return nil
-	case SignatureEd25519:
-		if len(pk.Key) != crypto.PublicKeySize {
-			return errors.New("invalid public key size in transaction")
-		}
-		if len(signature) != crypto.SignatureSize {
-			return errors.New("invalid signature size in transaction")
-		}
-		return nil
-	default:
-		return errors.New("unrecognized public key type in transaction")
-	}
-}
-
-func signHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx Transaction, key interface{}, extraObjects ...interface{}) ([]byte, error) {
-	switch pk.Algorithm {
-	case SignatureEntropy:
-		// Entropy cannot ever be used to sign a transaction.
-		return nil, ErrEntropyKey
-
-	case SignatureEd25519:
-		// decode the ed-secretKey
-		var edSK crypto.SecretKey
-		switch k := key.(type) {
-		case crypto.SecretKey:
-			edSK = k
-		case ByteSlice:
-			if len(k) != crypto.SecretKeySize {
-				return nil, errors.New("invalid secret key size")
-			}
-			copy(edSK[:], k)
-		case []byte:
-			if len(k) != crypto.SecretKeySize {
-				return nil, errors.New("invalid secret key size")
-			}
-			copy(edSK[:], k)
-		default:
-			return nil, fmt.Errorf("%T is an unknown secret key size", key)
-		}
-		sigHash := tx.InputSigHash(inputIndex, extraObjects...)
-		sig := crypto.SignHash(sigHash, edSK)
-		return sig[:], nil
-
-	default:
-		return nil, ErrUnknownSignAlgorithmType
-	}
-}
-
-func verifyHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx Transaction, sig []byte, extraObjects ...interface{}) (err error) {
-	switch pk.Algorithm {
-	case SignatureEntropy:
-		// Entropy cannot ever be used to sign a transaction.
-		err = ErrEntropyKey
-
-	case SignatureEd25519:
-		// Decode the public key and signature.
-		var (
-			edPK  crypto.PublicKey
-			edSig crypto.Signature
-		)
-		copy(edPK[:], pk.Key)
-		copy(edSig[:], sig)
-		cryptoSig := crypto.Signature(edSig)
-		sigHash := tx.InputSigHash(inputIndex, extraObjects...)
-		err = crypto.VerifyHash(sigHash, edPK, cryptoSig)
-
-	default:
-		// If the identifier is not recognized, assume that the signature
-		// is valid. This allows more signature types to be added via soft
-		// forking.
-	}
-
-	return
 }
 
 // _RegisteredInputLocks contains all known/registered unlockers constructors.

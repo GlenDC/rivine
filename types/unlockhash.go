@@ -57,6 +57,10 @@ const (
 	// who has to give the secret in order to do so. After the InputLock,
 	// the output can only be claimed by the sender, with no deadline in this phas
 	UnlockTypeAtomicSwap
+
+	UnlockTypeTimeLock
+
+	UnlockTypeSortedSet
 )
 
 // NewUnlockHash creates a new unlock hash
