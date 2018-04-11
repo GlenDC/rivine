@@ -292,6 +292,8 @@ func getBlockStakeOutput(tx *bolt.Tx, id types.BlockStakeOutputID) (types.BlockS
 		return types.BlockStakeOutput{}, errNilItem
 	}
 	var sfo types.BlockStakeOutput
+	// TODO: support old format for unmarshaling
+	// TODO: can we simply encode BlockStakeOutput always in the new format?!
 	err := encoding.Unmarshal(sfoBytes, &sfo)
 	if err != nil {
 		return types.BlockStakeOutput{}, err

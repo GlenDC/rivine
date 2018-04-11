@@ -147,7 +147,7 @@ func (bv stdBlockValidator) checkMinerPayouts(b types.Block) bool {
 		if payout.Value.IsZero() {
 			return false
 		}
-		if payout.UnlockHash.Cmp(bv.cs.chainCts.TransactionFeeBeneficiary) == 0 {
+		if payout.Condition.UnlockHash().Cmp(bv.cs.chainCts.TransactionFeeBeneficiary) == 0 {
 			sumTFP = sumTFP.Add(payout.Value) // payout is for tx fee beneficiary
 			continue
 		}

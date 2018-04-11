@@ -111,7 +111,7 @@ func (ext unknownTransactionExtension) debugEncodeTransactionCheck(t Transaction
 }
 
 // ValidateTransaction implements TransactionValidator.ValidateTransaction
-func (ext unknownTransactionExtension) ValidateTransaction(ctx TransactionValidationContext, _ Transaction) error {
+func (ext unknownTransactionExtension) ValidateTransaction(Transaction, uint64) error {
 	return nil // always valid, as there is no way to really validate the transaction, given its never unmarshalled
 }
 

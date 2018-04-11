@@ -71,6 +71,14 @@ func NewUnlockHash(t UnlockType, h crypto.Hash) UnlockHash {
 	}
 }
 
+func unlockHashFromHex(hstr string) (uh UnlockHash) {
+	err := uh.LoadString(hstr)
+	if err != nil {
+		panic(fmt.Sprintf("func unlockHashFromHex(%s) failed: %v", hstr, err))
+	}
+	return
+}
+
 // MarshalSia implements SiaMarshaler.MarshalSia
 func (t UnlockType) MarshalSia(w io.Writer) error {
 	_, err := w.Write([]byte{byte(t)})

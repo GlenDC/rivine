@@ -11,11 +11,10 @@ import (
 	"testing"
 
 	"github.com/rivine/rivine/crypto"
-	"github.com/rivine/rivine/encoding"
 )
 
 // TestTransactionIDs probes all of the ID functions of the Transaction type.
-func TestIDs(t *testing.T) {
+func TestIDs(t *testing.T) { // TODO: FIX
 	// Create every type of ID using empty fields.
 	txn := Transaction{
 		CoinOutputs:       []CoinOutput{{}},
@@ -173,15 +172,12 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-								},
-								Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 							},
+							Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 						},
 					},
 				},
@@ -194,31 +190,32 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-								},
-								Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 							},
+							Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 						},
 					},
 				},
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(2),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeSingleSignature,
-							Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+							},
 						},
 					},
 					{
 						Value: NewCurrency64(3),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeSingleSignature,
-							Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
+							},
 						},
 					},
 				},
@@ -231,79 +228,76 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-								},
-								Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 							},
+							Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 						},
 					},
 					{
 						ParentID: CoinOutputID(hs("3300000000000000000000000000000000000000000000000000000000000033")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeAtomicSwap,
-							il: &AtomicSwapInputLock{
-								Sender: UnlockHash{
-									Type: UnlockTypeSingleSignature,
-									Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
-								},
-								Receiver: UnlockHash{
-									Type: UnlockTypeSingleSignature,
-									Hash: hs("6363636363636363636363636363636363636363636363636363636363636363"),
-								},
-								HashedSecret: AtomicSwapHashedSecret(hs("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
-								TimeLock:     1522068743,
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("abababababababababababababababababababababababababababababababab"),
-								},
-								Signature: hbs("dededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededede"),
-								Secret:    AtomicSwapSecret(hs("dabadabadabadabadabadabadabadabadabadabadabadabadabadabadabadaba")),
+						Fulfillment: LegacyAtomicSwapFulfillment{
+							Sender: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
 							},
+							Receiver: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("6363636363636363636363636363636363636363636363636363636363636363"),
+							},
+							HashedSecret: AtomicSwapHashedSecret(hs("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
+							TimeLock:     1522068743,
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("abababababababababababababababababababababababababababababababab"),
+							},
+							Signature: hbs("dededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededede"),
+							Secret:    AtomicSwapSecret(hs("dabadabadabadabadabadabadabadabadabadabadabadabadabadabadabadaba")),
 						},
 					},
 				},
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(2),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeSingleSignature,
-							Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
+							},
 						},
 					},
 					{
 						Value: NewCurrency64(3),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeAtomicSwap,
-							Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeAtomicSwap,
+								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
+							},
 						},
 					},
 				},
 				BlockStakeInputs: []BlockStakeInput{
 					{
 						ParentID: BlockStakeOutputID(hs("4400000000000000000000000000000000000000000000000000000000000044")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
-								},
-								Signature: hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
 							},
+							Signature: hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
 						},
 					},
 				},
 				BlockStakeOutputs: []BlockStakeOutput{
 					{
 						Value: NewCurrency64(42),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeSingleSignature,
-							Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
+							},
 						},
 					},
 				},
@@ -390,15 +384,12 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("def123def123def123def123def123def123def123def123def123def123def1"),
-								},
-								Signature: hbs("ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("def123def123def123def123def123def123def123def123def123def123def1"),
 							},
+							Signature: hbs("ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef"),
 						},
 					},
 				},
@@ -487,93 +478,94 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("abcdef012345abcdef012345abcdef012345abcdef012345abcdef012345abcd")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-								},
-								Signature: hbs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 							},
+							Signature: hbs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"),
 						},
 					},
 					{
 						ParentID: CoinOutputID(hs("012345defabc012345defabc012345defabc012345defabc012345defabc0123")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeAtomicSwap,
-							il: &AtomicSwapInputLock{
-								Sender: UnlockHash{
-									Type: UnlockTypeSingleSignature,
-									Hash: hs("654f96b317efe5fd6cd8ba1a394dce7b6ebe8c9621d6c44cbe3c8f1b58ce632a"),
-								},
-								Receiver: UnlockHash{
-									Type: UnlockTypeSingleSignature,
-									Hash: hs("e89843e4b8231a01ba18b254d530110364432aafab8206bea72e5a20eaa55f70"),
-								},
-								HashedSecret: AtomicSwapHashedSecret(hs("abc543defabc543defabc543defabc543defabc543defabc543defabc543defa")),
-								TimeLock:     1522068743,
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-								},
-								Signature: hbs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"),
-								Secret:    AtomicSwapSecret(hs("def789def789def789def789def789dedef789def789def789def789def789de")),
+						Fulfillment: LegacyAtomicSwapFulfillment{
+							Sender: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("654f96b317efe5fd6cd8ba1a394dce7b6ebe8c9621d6c44cbe3c8f1b58ce632a"),
 							},
+							Receiver: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("e89843e4b8231a01ba18b254d530110364432aafab8206bea72e5a20eaa55f70"),
+							},
+							HashedSecret: AtomicSwapHashedSecret(hs("abc543defabc543defabc543defabc543defabc543defabc543defabc543defa")),
+							TimeLock:     1522068743,
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+							},
+							Signature: hbs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"),
+							Secret:    AtomicSwapSecret(hs("def789def789def789def789def789dedef789def789def789def789def789de")),
 						},
 					},
 				},
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(3),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeSingleSignature,
-							Hash: hs("42e9458e348598111b0bc19bda18e45835605db9f4620616d752220ae8605ce0"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("42e9458e348598111b0bc19bda18e45835605db9f4620616d752220ae8605ce0"),
+							},
 						},
 					},
 					{
 						Value: NewCurrency64(5),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeSingleSignature,
-							Hash: hs("a6a6c5584b2bfbd08738996cd7930831f958b9a5ed1595525236e861c1a0dc35"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeSingleSignature,
+								Hash: hs("a6a6c5584b2bfbd08738996cd7930831f958b9a5ed1595525236e861c1a0dc35"),
+							},
 						},
 					},
 					{
 						Value: NewCurrency64(8),
-						UnlockHash: UnlockHash{
-							Type: UnlockTypeAtomicSwap,
-							Hash: hs("a24c97c80eeac111aa4bcbb0ac8ffc364fa9b22da10d3054778d2332f68b365e"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: UnlockTypeAtomicSwap,
+								Hash: hs("a24c97c80eeac111aa4bcbb0ac8ffc364fa9b22da10d3054778d2332f68b365e"),
+							},
 						},
 					},
 				},
 				BlockStakeInputs: []BlockStakeInput{
 					{
 						ParentID: BlockStakeOutputID(hs("dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfde")),
-						Unlocker: InputLockProxy{
-							t: UnlockTypeSingleSignature,
-							il: &SingleSignatureInputLock{
-								PublicKey: SiaPublicKey{
-									Algorithm: SignatureEd25519,
-									Key:       hbs("ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef12"),
-								},
-								Signature: hbs("01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def"),
+						Fulfillment: SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef12"),
 							},
+							Signature: hbs("01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def01234def"),
 						},
 					},
 				},
 				BlockStakeOutputs: []BlockStakeOutput{
 					{
 						Value: NewCurrency64(4),
-						UnlockHash: UnlockHash{
-							Type: 100,
-							Hash: hs("53402d094ed0f336950c4be0feec37167aaaaf8b974d265900e49ab22773584c"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: 100,
+								Hash: hs("53402d094ed0f336950c4be0feec37167aaaaf8b974d265900e49ab22773584c"),
+							},
 						},
 					},
 					{
 						Value: NewCurrency64(2),
-						UnlockHash: UnlockHash{
-							Type: 42,
-							Hash: hs("b39baa9a58319fa47f78ed542a733a7198d106caeabf0a231b91ea3e4e222ffd"),
+						Condition: UnlockHashCondition{
+							TargetUnlockHash: UnlockHash{
+								Type: 42,
+								Hash: hs("b39baa9a58319fa47f78ed542a733a7198d106caeabf0a231b91ea3e4e222ffd"),
+							},
 						},
 					},
 				},
@@ -607,6 +599,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 		}
 	}
 }
+
 func TestOutputIDStringJSONEncoding(t *testing.T) {
 	testIDStringJSONEncoding(t, func(h *[crypto.HashSize]byte) idEncoder {
 		if h == nil {
@@ -925,7 +918,7 @@ func TestInputSigHashComputationCompatibleWithLegacyInputSigHash(t *testing.T) {
 		// compare inputSigHash
 		inputSigHashA, inputSigHashB :=
 			tx.InputSigHash(42, "foo"),
-			tx.LegacyInputSigHash(42, "foo")
+			tx.legacyInputSigHash(42, "foo")
 		if bytes.Compare(inputSigHashA[:], inputSigHashB[:]) != 0 {
 			t.Error(idx, inputSigHashA, "!=", inputSigHashB)
 			continue
@@ -938,34 +931,9 @@ func TestInputSigHashComputationCompatibleWithLegacyInputSigHash(t *testing.T) {
 		// these should now be different
 		inputSigHashA, inputSigHashB =
 			tx.InputSigHash(42, "foo"),
-			tx.LegacyInputSigHash(42, "foo")
+			tx.legacyInputSigHash(42, "foo")
 		if bytes.Compare(inputSigHashA[:], inputSigHashB[:]) == 0 {
 			t.Error(idx, inputSigHashA, "==", inputSigHashB)
 		}
 	}
-}
-
-func (t Transaction) LegacyInputSigHash(inputIndex uint64, extraObjects ...interface{}) (hash crypto.Hash) {
-	h := crypto.NewHash()
-	enc := encoding.NewEncoder(h)
-
-	enc.Encode(inputIndex)
-	if len(extraObjects) > 0 {
-		enc.EncodeAll(extraObjects...)
-	}
-	for _, ci := range t.CoinInputs {
-		enc.EncodeAll(ci.ParentID, ci.Unlocker.UnlockHash())
-	}
-	enc.Encode(t.CoinOutputs)
-	for _, bsi := range t.BlockStakeInputs {
-		enc.EncodeAll(bsi.ParentID, bsi.Unlocker.UnlockHash())
-	}
-	enc.EncodeAll(
-		t.BlockStakeOutputs,
-		t.MinerFees,
-		t.ArbitraryData,
-	)
-
-	h.Sum(hash[:0])
-	return
 }

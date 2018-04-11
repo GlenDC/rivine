@@ -18,31 +18,12 @@ import (
 var (
 	ErrInvalidInputLockType  = errors.New("invalid input lock type")
 	ErrUnlockConditionLocked = errors.New("unlock condition is already locked")
-
-	// ErrUnknownUnlockType is an error returned in case
-	// one tries to use an input lock of unknown type where it's not supported
-	ErrUnknownUnlockType = errors.New("unknown unlock type")
-
-	// ErrUnknownSignAlgorithmType is an error returned in case
-	// one tries to sign using an unknown signing algorithm type.
-	//
-	// NOTE That verification of unknown signing algorithm types does always succeed!
-	ErrUnknownSignAlgorithmType = errors.New("unknown signature algorithm type")
 )
 
 // Errors related to atomic swaps
 var (
 	ErrInvalidPreImageSha256 = errors.New("invalid pre-image sha256")
 	ErrInvalidRedeemer       = errors.New("invalid input redeemer")
-)
-
-const (
-	// AtomicSwapSecretLen is the required/fixed length
-	// of an atomic swap secret, the pre-image of an hashed secret.
-	AtomicSwapSecretLen = sha256.Size
-	// AtomicSwapHashedSecretLen is the required/fixed length
-	// of an atomic swap hashed secret, the post-image of a secret.
-	AtomicSwapHashedSecretLen = sha256.Size
 )
 
 type (
