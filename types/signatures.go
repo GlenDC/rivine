@@ -111,7 +111,7 @@ func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...inter
 		enc.EncodeAll(extraObjects...)
 	}
 	for _, ci := range t.CoinInputs {
-		switch cf := ci.Fulfillment.(type) {
+		switch cf := ci.Fulfillment.Fulfillment.(type) {
 		case *SingleSignatureFulfillment:
 			enc.EncodeAll(ci.ParentID,
 				NewUnlockHash(UnlockTypeSingleSignature,
@@ -127,7 +127,7 @@ func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...inter
 	}
 	enc.Encode(t.CoinOutputs)
 	for _, bsi := range t.BlockStakeInputs {
-		switch cf := bsi.Fulfillment.(type) {
+		switch cf := bsi.Fulfillment.Fulfillment.(type) {
 		case *SingleSignatureFulfillment:
 			enc.EncodeAll(bsi.ParentID,
 				NewUnlockHash(UnlockTypeSingleSignature,

@@ -268,13 +268,13 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: &SingleSignatureFulfillment{
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 							},
 							Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-						},
+						}},
 					},
 				},
 				MinerFees: []Currency{NewCurrency64(1)},
@@ -286,17 +286,17 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: &SingleSignatureFulfillment{
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 							},
 							Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
-						},
+						}},
 					},
 					{
 						ParentID: CoinOutputID(hs("3300000000000000000000000000000000000000000000000000000000000033")),
-						Fulfillment: &LegacyAtomicSwapFulfillment{
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
@@ -313,50 +313,50 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 							},
 							Signature: hbs("dededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededede"),
 							Secret:    AtomicSwapSecret(hs("dabadabadabadabadabadabadabadabadabadabadabadabadabadabadabadaba")),
-						},
+						}},
 					},
 				},
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(2),
-						Condition: &UnlockHashCondition{
+						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
 							},
-						},
+						}},
 					},
 					{
 						Value: NewCurrency64(3),
-						Condition: &UnlockHashCondition{
+						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeAtomicSwap,
 								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
 							},
-						},
+						}},
 					},
 				},
 				BlockStakeInputs: []BlockStakeInput{
 					{
 						ParentID: BlockStakeOutputID(hs("4400000000000000000000000000000000000000000000000000000000000044")),
-						Fulfillment: &SingleSignatureFulfillment{
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
 							},
 							Signature: hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
-						},
+						}},
 					},
 				},
 				BlockStakeOutputs: []BlockStakeOutput{
 					{
 						Value: NewCurrency64(42),
-						Condition: &UnlockHashCondition{
+						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
 							},
-						},
+						}},
 					},
 				},
 				MinerFees:     []Currency{NewCurrency64(1)},

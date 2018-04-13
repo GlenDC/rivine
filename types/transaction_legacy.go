@@ -38,7 +38,7 @@ type (
 		UnlockHash UnlockHash `json:"unlockhash"`
 	}
 	legacyTransactionInputLockProxy struct {
-		Fulfillment UnlockFulfillment
+		Fulfillment MarshalableUnlockFulfillment
 	}
 )
 
@@ -50,14 +50,14 @@ func newLegacyTransaction(t Transaction) (lt legacyTransaction, err error) {
 		lt.Data.CoinInputs[i] = legacyTransactionCoinInput{
 			ParentID: ci.ParentID,
 			Unlocker: legacyTransactionInputLockProxy{
-				Fulfillment: ci.Fulfillment,
+				Fulfillment: ci.Fulfillment.Fulfillment,
 			},
 		}
 	}
 	if l := len(t.CoinOutputs); l > 0 {
 		lt.Data.CoinOutputs = make([]legacyTransactionCoinOutput, l)
 		for i, co := range t.CoinOutputs {
-			uhc, ok := co.Condition.(*UnlockHashCondition)
+			uhc, ok := co.Condition.Condition.(*UnlockHashCondition)
 			if !ok {
 				err = errors.New("only unlock hash conditions are supported for legacy transactions")
 				return
@@ -75,7 +75,7 @@ func newLegacyTransaction(t Transaction) (lt legacyTransaction, err error) {
 			lt.Data.BlockStakeInputs[i] = legacyTransactionBlockStakeInput{
 				ParentID: bsi.ParentID,
 				Unlocker: legacyTransactionInputLockProxy{
-					Fulfillment: bsi.Fulfillment,
+					Fulfillment: bsi.Fulfillment.Fulfillment,
 				},
 			}
 		}
@@ -83,7 +83,7 @@ func newLegacyTransaction(t Transaction) (lt legacyTransaction, err error) {
 	if l := len(t.BlockStakeOutputs); l > 0 {
 		lt.Data.BlockStakeOutputs = make([]legacyTransactionBlockStakeOutput, l)
 		for i, bso := range t.BlockStakeOutputs {
-			uhc, ok := bso.Condition.(*UnlockHashCondition)
+			uhc, ok := bso.Condition.Condition.(*UnlockHashCondition)
 			if !ok {
 				err = errors.New("only unlock hash conditions are supported for legacy transactions")
 				return
@@ -108,7 +108,7 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 	for i, lci := range lt.Data.CoinInputs {
 		t.CoinInputs[i] = CoinInput{
 			ParentID:    lci.ParentID,
-			Fulfillment: lci.Unlocker.Fulfillment,
+			Fulfillment: UnlockFulfillmentProxy{Fulfillment: lci.Unlocker.Fulfillment},
 		}
 	}
 	if l := len(lt.Data.CoinOutputs); l > 0 {
@@ -116,9 +116,9 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 		for i, lco := range lt.Data.CoinOutputs {
 			t.CoinOutputs[i] = CoinOutput{
 				Value: lco.Value,
-				Condition: &UnlockHashCondition{
+				Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 					TargetUnlockHash: lco.UnlockHash,
-				},
+				}},
 			}
 		}
 	}
@@ -128,7 +128,7 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 		for i, lci := range lt.Data.BlockStakeInputs {
 			t.BlockStakeInputs[i] = BlockStakeInput{
 				ParentID:    lci.ParentID,
-				Fulfillment: lci.Unlocker.Fulfillment,
+				Fulfillment: UnlockFulfillmentProxy{Fulfillment: lci.Unlocker.Fulfillment},
 			}
 		}
 	}
@@ -137,9 +137,9 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 		for i, lco := range lt.Data.BlockStakeOutputs {
 			t.BlockStakeOutputs[i] = BlockStakeOutput{
 				Value: lco.Value,
-				Condition: &UnlockHashCondition{
+				Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 					TargetUnlockHash: lco.UnlockHash,
-				},
+				}},
 			}
 		}
 	}

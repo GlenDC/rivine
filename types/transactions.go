@@ -139,18 +139,18 @@ type (
 	// output that is getting consumed, and the UnlockConditions contain the rules
 	// for spending the output. The UnlockConditions must match the UnlockHash of
 	// the output.
-	CoinInput struct { // TODO: add JSON/binary marshaling
-		ParentID    CoinOutputID
-		Fulfillment UnlockFulfillment
+	CoinInput struct {
+		ParentID    CoinOutputID           `json:"parentid"`
+		Fulfillment UnlockFulfillmentProxy `json:"fulfillment"`
 	}
 
 	// A CoinOutput holds a volume of siacoins. Outputs must be spent
 	// atomically; that is, they must all be spent in the same transaction. The
 	// UnlockHash is the hash of the UnlockConditions that must be fulfilled
 	// in order to spend the output.
-	CoinOutput struct { // TODO: add JSON/binary marshaling
-		Value     Currency
-		Condition UnlockCondition
+	CoinOutput struct {
+		Value     Currency             `json:"value"`
+		Condition UnlockConditionProxy `json:"condition"`
 	}
 
 	// A BlockStakeInput consumes a BlockStakeOutput and adds the blockstakes to the set of
@@ -158,18 +158,18 @@ type (
 	// output that is getting consumed, and the UnlockConditions contain the rules
 	// for spending the output. The UnlockConditions must match the UnlockHash of
 	// the output.
-	BlockStakeInput struct { // TODO: add JSON/binary marshaling
-		ParentID    BlockStakeOutputID
-		Fulfillment UnlockFulfillment
+	BlockStakeInput struct {
+		ParentID    BlockStakeOutputID     `json:"parentid"`
+		Fulfillment UnlockFulfillmentProxy `json:"fulfillment"`
 	}
 
 	// A BlockStakeOutput holds a volume of blockstakes. Outputs must be spent
 	// atomically; that is, they must all be spent in the same transaction. The
 	// UnlockHash is the hash of a set of UnlockConditions that must be fulfilled
 	// in order to spend the output.
-	BlockStakeOutput struct { // TODO: add JSON/binary marshaling
-		Value     Currency
-		Condition UnlockCondition
+	BlockStakeOutput struct {
+		Value     Currency             `json:"value"`
+		Condition UnlockConditionProxy `json:"condition"`
 	}
 
 	// UnspentBlockStakeOutput groups the BlockStakeOutputID, the block height, the transaction index, the output index and the value
