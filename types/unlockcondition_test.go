@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/rivine/rivine/encoding"
 )
 
 func TestUnlockConditionSiaEncoding(t *testing.T) {
@@ -55,6 +57,8 @@ func TestUnlockFulfillmentSiaEncoding(t *testing.T) {
 		`ff0c0000000000000048656c6c6f2c205465737421`,
 		// single signature fulfillment
 		`01800000000000000065643235353139000000000000000000200000000000000035fffffffffffffffffffffffffffffffffffffffffffffffff46fffffffffff4000000000000000fffffffffffffffffffffffffffff123ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff`,
+		// legacy atomic swap fulfillment
+		`020a01000000000000011234567891234567891234567891234567891234567891234567891234567891016363636363636363636363636363636363636363636363636363636363636363bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb07edb85a00000000656432353531390000000000000000002000000000000000abababababababababababababababababababababababababababababababab4000000000000000dededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededabadabadabadabadabadabadabadabadabadabadabadabadabadabadabadaba`,
 		// atomic swap fulfillment
 		`02a000000000000000656432353531390000000000000000002000000000000000fffffffffffffffffffffffffffffffff04fffffffffffffffffffffffffffff4000000000000000ffffffffffffffffffffffff56fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2ffffffffffffffffff123ffffffffffafffffffffffeffffffffffffff`,
 	}
@@ -169,6 +173,43 @@ func TestUnlockFulfillmentJSONEncoding(t *testing.T) {
 		"signature": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"
 	}
 }`, ``},
+		// legacy atomic swap fulfillment
+		{
+			`{
+	"type": 2,
+	"data": {
+		"sender": "6453402d094ed0f336950c4be0feec37167aaaaf8b974d265900e49ab22773584cfe96393b1360",
+		"receiver": "0101234567890123456789012345678901012345678901234567890123456789018a50e31447b8",
+		"hashedsecret": "abc543defabc543defabc543defabc543defabc543defabc543defabc543defa",
+		"timelock": 1522068743,
+		"publickey": "ed25519:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		"signature": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab"
+	}
+}`, `{
+	"type": 2,
+	"data": {
+		"sender": "6453402d094ed0f336950c4be0feec37167aaaaf8b974d265900e49ab22773584cfe96393b1360",
+		"receiver": "0101234567890123456789012345678901012345678901234567890123456789018a50e31447b8",
+		"hashedsecret": "abc543defabc543defabc543defabc543defabc543defabc543defabc543defa",
+		"timelock": 1522068743,
+		"publickey": "ed25519:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		"signature": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab",
+		"secret": "0000000000000000000000000000000000000000000000000000000000000000"
+	}
+}`},
+		{
+			`{
+	"type": 2,
+	"data": {
+		"sender": "6453402d094ed0f336950c4be0feec37167aaaaf8b974d265900e49ab22773584cfe96393b1360",
+		"receiver": "0101234567890123456789012345678901012345678901234567890123456789018a50e31447b8",
+		"hashedsecret": "abc543defabc543defabc543defabc543defabc543defabc543defabc543defa",
+		"timelock": 1522068743,
+		"publickey": "ed25519:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+		"signature": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefab",
+		"secret": "def789def789def789def789def789dedef789def789def789def789def789de"
+	}
+}`, ``},
 		// atomic swap fulfillment
 		{
 			`{
@@ -220,4 +261,32 @@ func TestUnlockFulfillmentJSONEncoding(t *testing.T) {
 			t.Error(idx, out, "!=", expected)
 		}
 	}
+}
+
+func TestNilUnlockConditionProxy(t *testing.T) {
+	var c UnlockConditionProxy
+	if ct := c.ConditionType(); ct != ConditionTypeNil {
+		t.Error("ConditionType", ct, "!=", ConditionTypeNil)
+	}
+	if err := c.IsStandardCondition(); err != nil {
+		t.Error("IsStandardCondition", err)
+	}
+	if b, err := c.MarshalJSON(); err != nil || string(b) != "{}" {
+		t.Error("MarshalJSON", b, err)
+	}
+	if b := encoding.Marshal(c); bytes.Compare(b, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0}) != 0 {
+		t.Error("MarshalSia", b)
+	}
+}
+
+func TestFulfill(t *testing.T) {
+	// TODO
+}
+
+func TestIsStandardCondition(t *testing.T) {
+	// TODO
+}
+
+func TestIsStandardFulfillment(t *testing.T) {
+	// TODO
 }
