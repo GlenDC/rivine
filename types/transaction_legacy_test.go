@@ -268,7 +268,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
@@ -286,7 +286,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
@@ -296,7 +296,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 					},
 					{
 						ParentID: CoinOutputID(hs("3300000000000000000000000000000000000000000000000000000000000033")),
-						Fulfillment: LegacyAtomicSwapFulfillment{
+						Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
@@ -319,7 +319,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(2),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
@@ -328,7 +328,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 					},
 					{
 						Value: NewCurrency64(3),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeAtomicSwap,
 								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
@@ -339,7 +339,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				BlockStakeInputs: []BlockStakeInput{
 					{
 						ParentID: BlockStakeOutputID(hs("4400000000000000000000000000000000000000000000000000000000000044")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
@@ -351,7 +351,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 				BlockStakeOutputs: []BlockStakeOutput{
 					{
 						Value: NewCurrency64(42),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),

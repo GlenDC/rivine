@@ -36,6 +36,7 @@ const (
 	// TransactionVersionZero defines the initial (and currently only)
 	// version format. Any other version number is concidered invalid.
 	TransactionVersionZero TransactionVersion = iota
+	TransactionVersionOne
 )
 
 type (

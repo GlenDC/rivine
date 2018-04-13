@@ -138,13 +138,13 @@ func DefaultChainConstants() ChainConstants {
 		// carbon boss inject cover mountain fetch fiber fit tornado cloth wing dinosaur proof joy intact fabric thumb rebel borrow poet chair network expire else
 		cts.GenesisBlockStakeAllocation = append(cts.GenesisBlockStakeAllocation, BlockStakeOutput{
 			Value: NewCurrency64(1000000),
-			Condition: UnlockHashCondition{
+			Condition: &UnlockHashCondition{
 				TargetUnlockHash: unlockHashFromHex("015a080a9259b9d4aaa550e2156f49b1a79a64c7ea463d810d4493e8242e6791584fbdac553e6f"),
 			},
 		})
 		cts.GenesisCoinDistribution = append(cts.GenesisCoinDistribution, CoinOutput{
 			Value: currencyUnits.OneCoin.Mul64(1000),
-			Condition: UnlockHashCondition{
+			Condition: &UnlockHashCondition{
 				TargetUnlockHash: unlockHashFromHex("015a080a9259b9d4aaa550e2156f49b1a79a64c7ea463d810d4493e8242e6791584fbdac553e6f"),
 			},
 		})
@@ -175,7 +175,7 @@ func DefaultChainConstants() ChainConstants {
 			GenesisBlockStakeAllocation: []BlockStakeOutput{
 				{
 					Value: NewCurrency64(2000),
-					Condition: UnlockHashCondition{
+					Condition: &UnlockHashCondition{
 						TargetUnlockHash: UnlockHash{
 							Type: UnlockTypeSingleSignature,
 							Hash: crypto.Hash{214, 166, 197, 164, 29, 201, 53, 236, 106, 239, 10, 158, 127, 131, 20, 138, 63, 221, 230, 16, 98, 247, 32, 77, 210, 68, 116, 12, 241, 89, 27, 223},
@@ -184,7 +184,7 @@ func DefaultChainConstants() ChainConstants {
 				},
 				{
 					Value: NewCurrency64(7000),
-					Condition: UnlockHashCondition{
+					Condition: &UnlockHashCondition{
 						TargetUnlockHash: UnlockHash{
 							Type: UnlockTypeSingleSignature,
 							Hash: crypto.Hash{209, 246, 228, 60, 248, 78, 242, 110, 9, 8, 227, 248, 225, 216, 163, 52, 142, 93, 47, 176, 103, 41, 137, 80, 212, 8, 132, 58, 241, 189, 2, 17},
@@ -193,13 +193,13 @@ func DefaultChainConstants() ChainConstants {
 				},
 				{
 					Value:     NewCurrency64(1000),
-					Condition: NilCondition{},
+					Condition: &NilCondition{},
 				},
 			},
 			GenesisCoinDistribution: []CoinOutput{
 				{
 					Value: currencyUnits.OneCoin.Mul64(1000),
-					Condition: UnlockHashCondition{
+					Condition: &UnlockHashCondition{
 						TargetUnlockHash: UnlockHash{
 							Type: UnlockTypeSingleSignature,
 							Hash: crypto.Hash{214, 166, 197, 164, 29, 201, 53, 236, 106, 239, 10, 158, 127, 131, 20, 138, 63, 221, 230, 16, 98, 247, 32, 77, 210, 68, 116, 12, 241, 89, 27, 223},
@@ -232,13 +232,13 @@ func DefaultChainConstants() ChainConstants {
 
 	cts.GenesisBlockStakeAllocation = append(cts.GenesisBlockStakeAllocation, BlockStakeOutput{
 		Value: NewCurrency64(1000000),
-		Condition: UnlockHashCondition{
+		Condition: &UnlockHashCondition{
 			TargetUnlockHash: unlockHashFromHex("01b5e42056ef394f2ad9b511a61cec874d25bebe2095682dd37455cbafed4bec154e382a23f90e"),
 		},
 	})
 	cts.GenesisCoinDistribution = append(cts.GenesisCoinDistribution, CoinOutput{
 		Value: currencyUnits.OneCoin.Mul64(100 * 1000 * 1000),
-		Condition: UnlockHashCondition{
+		Condition: &UnlockHashCondition{
 			TargetUnlockHash: unlockHashFromHex("01b5e42056ef394f2ad9b511a61cec874d25bebe2095682dd37455cbafed4bec154e382a23f90e"),
 		},
 	})

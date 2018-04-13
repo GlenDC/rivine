@@ -3,8 +3,10 @@ package types
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/rivine/rivine/crypto"
 	"github.com/rivine/rivine/encoding"
@@ -14,8 +16,7 @@ import (
 
 type (
 	UnlockCondition interface {
-		UnlockType() UnlockType
-		UnlockHash() UnlockHash // is it just here for legacy reasons or does it still serve a purpose?
+		ConditionType() ConditionType
 		IsStandardCondition() error
 
 		Marshal() []byte
@@ -24,16 +25,19 @@ type (
 
 	UnlockFulfillment interface {
 		Fulfill(condition interface{}, ctx FulfillContext) error
-		UnlockType() UnlockType
+
+		FulfillmentType() FulfillmentType
 		IsStandardFulfillment() error
 
 		Marshal() []byte
 		Unmarshal([]byte) error
 	}
 
-	UnlockConstructorPair struct {
-		ConditionConstructor   func() UnlockCondition
-		FulfillmentConstructor func() UnlockFulfillment
+	UnlockConditionProxy struct {
+		UnlockCondition
+	}
+	UnlockFulfillmentProxy struct {
+		UnlockFulfillment
 	}
 
 	FulfillContext struct {
@@ -41,6 +45,21 @@ type (
 		BlockHeight BlockHeight
 		Transaction Transaction
 	}
+
+	ConditionType   byte
+	FulfillmentType byte
+)
+
+const (
+	ConditionTypeNil ConditionType = iota
+	ConditionTypeUnlockHash
+	ConditionTypeAtomicSwap
+)
+
+const (
+	FulfillmentTypeNil FulfillmentType = iota
+	FulfillmentTypeSingleSignature
+	FulfillmentTypeAtomicSwap
 )
 
 const (
@@ -59,6 +78,9 @@ var (
 	// one tries to use an input lock of unknown type where it's not supported
 	ErrUnknownUnlockType = errors.New("unknown unlock type")
 
+	ErrUnknownConditionType   = errors.New("unknown condition type")
+	ErrUnknownFulfillmentType = errors.New("unknown fulfillment type")
+
 	// ErrUnknownSignAlgorithmType is an error returned in case
 	// one tries to sign using an unknown signing algorithm type.
 	//
@@ -66,22 +88,36 @@ var (
 	ErrUnknownSignAlgorithmType = errors.New("unknown signature algorithm type")
 )
 
-func RegisterUnlockConstructorPair(ut UnlockType, cp UnlockConstructorPair) {
-	ccNotGiven, fcNotGiven := cp.ConditionConstructor == nil, cp.FulfillmentConstructor == nil
-	if ccNotGiven && fcNotGiven {
-		delete(_RegisteredUnlockConsturctorPairs, ut)
+func RegisterUnlockConditionConstructor(ct ConditionType, cc UnlockConditionConstructor) {
+	if cc == nil {
+		delete(_RegisteredUnlockConditionConstructors, ct)
 	}
-	if ccNotGiven {
-		panic("condition constructor has to be given if fulfillment constructor is given")
-	}
-	if fcNotGiven {
-		panic("fulfillment constructor has to be given if condition constructor is given")
-	}
-	_RegisteredUnlockConsturctorPairs[ut] = cp
+	_RegisteredUnlockConditionConstructors[ct] = cc
 }
 
+func RegisterUnlockFulfillmentConstructor(ft FulfillmentType, fc UnlockFulfillmentConstructor) {
+	if fc == nil {
+		delete(_RegisteredUnlockFulfillmentConstructors, ft)
+	}
+	_RegisteredUnlockFulfillmentConstructors[ft] = fc
+}
+
+type (
+	UnlockConditionConstructor   func() UnlockCondition
+	UnlockFulfillmentConstructor func() UnlockFulfillment
+)
+
 var (
-	_RegisteredUnlockConsturctorPairs = map[UnlockType]UnlockConstructorPair{}
+	_RegisteredUnlockConditionConstructors = map[ConditionType]UnlockConditionConstructor{
+		ConditionTypeNil:        func() UnlockCondition { return &NilCondition{} },
+		ConditionTypeUnlockHash: func() UnlockCondition { return &UnlockHashCondition{} },
+		ConditionTypeAtomicSwap: func() UnlockCondition { return &AtomicSwapCondition{} },
+	}
+	_RegisteredUnlockFulfillmentConstructors = map[FulfillmentType]UnlockFulfillmentConstructor{
+		FulfillmentTypeNil:             func() UnlockFulfillment { return &NilFulfillment{} },
+		FulfillmentTypeSingleSignature: func() UnlockFulfillment { return &SingleSignatureFulfillment{} },
+		FulfillmentTypeAtomicSwap:      func() UnlockFulfillment { return &AtomicSwapFulfillment{} },
+	}
 )
 
 type (
@@ -89,11 +125,11 @@ type (
 	NilFulfillment struct{}
 
 	UnknownCondition struct {
-		Type         UnlockType
+		Type         ConditionType
 		RawCondition []byte
 	}
 	UnknownFulfillment struct {
-		Type           UnlockType
+		Type           FulfillmentType
 		RawFulfillment []byte
 	}
 
@@ -116,7 +152,7 @@ type (
 	AtomicSwapFulfillment struct {
 		PublicKey SiaPublicKey     `json:"publickey"`
 		Signature ByteSlice        `json:"signature"`
-		Secret    AtomicSwapSecret `json:"secret"`
+		Secret    AtomicSwapSecret `json:"secret,omitempty"`
 	}
 	LegacyAtomicSwapFulfillment struct { // legacy fulfillment as used in transactions of version 0
 		Sender       UnlockHash
@@ -135,30 +171,26 @@ type (
 	AtomicSwapHashedSecret [sha256.Size]byte
 )
 
-func (n NilCondition) UnlockType() UnlockType     { return UnlockTypeNil }
-func (n NilCondition) UnlockHash() UnlockHash     { return UnlockHash{} }
-func (n NilCondition) IsStandardCondition() error { return nil } // always valid
+func (n *NilCondition) ConditionType() ConditionType { return ConditionTypeNil }
+func (n *NilCondition) IsStandardCondition() error   { return nil } // always valid
 
-func (n NilCondition) Marshal() []byte          { return nil } // nothing to marshal
-func (n NilCondition) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
+func (n *NilCondition) Marshal() []byte          { return nil } // nothing to marshal
+func (n *NilCondition) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
 
-func (n NilFulfillment) Fulfill(interface{}, FulfillContext) error { return nil } // always fulfilled
-func (n NilFulfillment) UnlockType() UnlockType                    { return UnlockTypeNil }
-func (n NilFulfillment) IsStandardFulfillment() error              { return nil } // always valid
+func (n *NilFulfillment) Fulfill(interface{}, FulfillContext) error { return nil } // always fulfilled
+func (n *NilFulfillment) FulfillmentType() FulfillmentType          { return FulfillmentTypeNil }
+func (n *NilFulfillment) IsStandardFulfillment() error              { return nil } // always valid
 
-func (n NilFulfillment) Marshal() []byte          { return nil } // nothing to marshal
-func (n NilFulfillment) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
+func (n *NilFulfillment) Marshal() []byte          { return nil } // nothing to marshal
+func (n *NilFulfillment) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
 
-func (u UnknownCondition) UnlockType() UnlockType { return u.Type }
-func (u UnknownCondition) UnlockHash() UnlockHash {
-	return NewUnlockHash(u.Type, crypto.HashObject(u.RawCondition))
-}
-func (u UnknownCondition) IsStandardCondition() error { return ErrUnknownUnlockType } // never valid
+func (u *UnknownCondition) ConditionType() ConditionType { return u.Type }
+func (u *UnknownCondition) IsStandardCondition() error   { return ErrUnknownUnlockType } // never valid
 
-func (u UnknownCondition) Marshal() []byte {
+func (u *UnknownCondition) Marshal() []byte {
 	return u.RawCondition
 }
-func (u UnknownCondition) Unmarshal(b []byte) error {
+func (u *UnknownCondition) Unmarshal(b []byte) error {
 	if len(b) == 0 {
 		return errors.New("no bytes given to unmarsal into a raw condition")
 	}
@@ -166,14 +198,14 @@ func (u UnknownCondition) Unmarshal(b []byte) error {
 	return nil
 }
 
-func (u UnknownFulfillment) Fulfill(interface{}, FulfillContext) error { return nil } // always fulfilled
-func (u UnknownFulfillment) UnlockType() UnlockType                    { return u.Type }
-func (u UnknownFulfillment) IsStandardFulfillment() error              { return ErrUnknownUnlockType } // never valid
+func (u *UnknownFulfillment) Fulfill(interface{}, FulfillContext) error { return nil } // always fulfilled
+func (u *UnknownFulfillment) FulfillmentType() FulfillmentType          { return u.Type }
+func (u *UnknownFulfillment) IsStandardFulfillment() error              { return ErrUnknownUnlockType } // never valid
 
-func (u UnknownFulfillment) Marshal() []byte {
+func (u *UnknownFulfillment) Marshal() []byte {
 	return u.RawFulfillment
 }
-func (u UnknownFulfillment) Unmarshal(b []byte) error {
+func (u *UnknownFulfillment) Unmarshal(b []byte) error {
 	if len(b) == 0 {
 		return errors.New("no bytes given to unmarsal into a raw fulfillment")
 	}
@@ -181,9 +213,8 @@ func (u UnknownFulfillment) Unmarshal(b []byte) error {
 	return nil
 }
 
-func (uh UnlockHashCondition) UnlockType() UnlockType { return uh.TargetUnlockHash.Type }
-func (uh UnlockHashCondition) UnlockHash() UnlockHash { return uh.TargetUnlockHash }
-func (uh UnlockHashCondition) IsStandardCondition() error {
+func (uh *UnlockHashCondition) ConditionType() ConditionType { return ConditionTypeUnlockHash }
+func (uh *UnlockHashCondition) IsStandardCondition() error {
 	if uh.TargetUnlockHash.Type != UnlockTypeSingleSignature && uh.TargetUnlockHash.Type != UnlockTypeAtomicSwap {
 		return errors.New("unsupported unlock type by unlock hash condition")
 	}
@@ -193,10 +224,10 @@ func (uh UnlockHashCondition) IsStandardCondition() error {
 	return nil
 }
 
-func (uh UnlockHashCondition) Marshal() []byte {
+func (uh *UnlockHashCondition) Marshal() []byte {
 	return encoding.Marshal(uh.TargetUnlockHash)
 }
-func (uh UnlockHashCondition) Unmarshal(b []byte) error {
+func (uh *UnlockHashCondition) Unmarshal(b []byte) error {
 	return encoding.Unmarshal(b, &uh.TargetUnlockHash)
 }
 
@@ -204,7 +235,7 @@ func NewSingleSignatureFulfillment() (SingleSignatureFulfillment, error) {
 	panic("TODO")
 }
 
-func (ss SingleSignatureFulfillment) Fulfill(condition interface{}, ctx FulfillContext) error {
+func (ss *SingleSignatureFulfillment) Fulfill(condition interface{}, ctx FulfillContext) error {
 	switch tc := condition.(type) {
 	case UnlockHashCondition:
 		uh := NewUnlockHash(UnlockTypeSingleSignature,
@@ -219,23 +250,22 @@ func (ss SingleSignatureFulfillment) Fulfill(condition interface{}, ctx FulfillC
 		return ErrUnexpectedUnlockCondition
 	}
 }
-func (ss SingleSignatureFulfillment) UnlockType() UnlockType { return UnlockTypeSingleSignature }
-func (ss SingleSignatureFulfillment) IsStandardFulfillment() error {
+func (ss *SingleSignatureFulfillment) FulfillmentType() FulfillmentType {
+	return FulfillmentTypeSingleSignature
+}
+func (ss *SingleSignatureFulfillment) IsStandardFulfillment() error {
 	return strictSignatureCheck(ss.PublicKey, ss.Signature)
 }
 
-func (ss SingleSignatureFulfillment) Marshal() []byte {
+func (ss *SingleSignatureFulfillment) Marshal() []byte {
 	return encoding.MarshalAll(ss.PublicKey, ss.Signature)
 }
-func (ss SingleSignatureFulfillment) Unmarshal(b []byte) error {
+func (ss *SingleSignatureFulfillment) Unmarshal(b []byte) error {
 	return encoding.UnmarshalAll(b, &ss.PublicKey, &ss.Signature)
 }
 
-func (as AtomicSwapCondition) UnlockType() UnlockType { return UnlockTypeAtomicSwap }
-func (as AtomicSwapCondition) UnlockHash() UnlockHash {
-	return NewUnlockHash(UnlockTypeAtomicSwap, crypto.HashObject(encoding.Marshal(as)))
-}
-func (as AtomicSwapCondition) IsStandardCondition() error {
+func (as *AtomicSwapCondition) ConditionType() ConditionType { return ConditionTypeAtomicSwap }
+func (as *AtomicSwapCondition) IsStandardCondition() error {
 	if as.Sender.Type != UnlockTypeSingleSignature || as.Receiver.Type != UnlockTypeSingleSignature {
 		return errors.New("unsupported unlock hash type")
 	}
@@ -248,10 +278,10 @@ func (as AtomicSwapCondition) IsStandardCondition() error {
 	return nil
 }
 
-func (as AtomicSwapCondition) Marshal() []byte {
+func (as *AtomicSwapCondition) Marshal() []byte {
 	return encoding.MarshalAll(as.Sender, as.Receiver, as.HashedSecret, as.TimeLock)
 }
-func (as AtomicSwapCondition) Unmarshal(b []byte) error {
+func (as *AtomicSwapCondition) Unmarshal(b []byte) error {
 	return encoding.UnmarshalAll(b, &as.Sender, &as.Receiver, &as.HashedSecret, &as.TimeLock)
 }
 
@@ -263,12 +293,12 @@ func NewAtomicSwapRefundFulfillment() (AtomicSwapFulfillment, error) {
 	panic("TODO")
 }
 
-func (as AtomicSwapFulfillment) Fulfill(condition interface{}, ctx FulfillContext) error {
+func (as *AtomicSwapFulfillment) Fulfill(condition interface{}, ctx FulfillContext) error {
 	switch tc := condition.(type) {
 	case AtomicSwapCondition:
-		// create the unlockHash for the given public Key
-		unlockHash := NewSingleSignatureInputLock(as.PublicKey).UnlockHash()
-
+		// create the unlockHash for the given public Ke
+		unlockHash := NewUnlockHash(UnlockTypeSingleSignature,
+			crypto.HashObject(encoding.Marshal(as.PublicKey)))
 		// prior to our timelock, only the receiver can claim the unspend output
 		if CurrentTimestamp() <= tc.TimeLock {
 			// verify that receiver public key was given
@@ -307,28 +337,28 @@ func (as AtomicSwapFulfillment) Fulfill(condition interface{}, ctx FulfillContex
 		return ErrUnexpectedUnlockCondition
 	}
 }
-func (as AtomicSwapFulfillment) UnlockType() UnlockType { return UnlockTypeAtomicSwap }
-func (as AtomicSwapFulfillment) IsStandardFulfillment() error {
+func (as *AtomicSwapFulfillment) FulfillmentType() FulfillmentType { return FulfillmentTypeAtomicSwap }
+func (as *AtomicSwapFulfillment) IsStandardFulfillment() error {
 	return strictSignatureCheck(as.PublicKey, as.Signature)
 }
 
-func (as AtomicSwapFulfillment) Marshal() []byte {
+func (as *AtomicSwapFulfillment) Marshal() []byte {
 	return encoding.MarshalAll(as.PublicKey, as.Signature, as.Secret)
 }
-func (as AtomicSwapFulfillment) Unmarshal(b []byte) error {
+func (as *AtomicSwapFulfillment) Unmarshal(b []byte) error {
 	return encoding.UnmarshalAll(b, &as.PublicKey, &as.Signature, &as.Secret)
 }
 
-func (as LegacyAtomicSwapFulfillment) Fulfill(condition interface{}, ctx FulfillContext) error {
+func (as *LegacyAtomicSwapFulfillment) Fulfill(condition interface{}, ctx FulfillContext) error {
 	switch tc := condition.(type) {
 	case UnlockHashCondition:
 		// ensure the condition equals the ours
-		ourHS := AtomicSwapCondition{
-			Sender:       as.Sender,
-			Receiver:     as.Receiver,
-			HashedSecret: as.HashedSecret,
-			TimeLock:     as.TimeLock,
-		}.UnlockHash()
+		ourHS := NewUnlockHash(UnlockTypeAtomicSwap, crypto.HashObject(encoding.MarshalAll(
+			as.Sender,
+			as.Receiver,
+			as.HashedSecret,
+			as.TimeLock,
+		)))
 		if ourHS.Cmp(tc.TargetUnlockHash) != 0 {
 			return errors.New("produced unlock hash doesn't equal the expected unlock hash")
 		}
@@ -374,30 +404,56 @@ func (as LegacyAtomicSwapFulfillment) Fulfill(condition interface{}, ctx Fulfill
 		return ErrUnexpectedUnlockCondition
 	}
 }
-func (as LegacyAtomicSwapFulfillment) UnlockType() UnlockType { return UnlockTypeAtomicSwap }
-func (as LegacyAtomicSwapFulfillment) IsStandardFulfillment() error {
+func (as *LegacyAtomicSwapFulfillment) FulfillmentType() FulfillmentType {
+	return FulfillmentTypeAtomicSwap
+}
+func (as *LegacyAtomicSwapFulfillment) IsStandardFulfillment() error {
 	return strictSignatureCheck(as.PublicKey, as.Signature)
 }
 
-func (as LegacyAtomicSwapFulfillment) Marshal() []byte {
+func (as *LegacyAtomicSwapFulfillment) Marshal() []byte {
 	return nil // not supported in legacy fulfillment
 }
-func (as LegacyAtomicSwapFulfillment) Unmarshal(b []byte) error {
+func (as *LegacyAtomicSwapFulfillment) Unmarshal(b []byte) error {
 	return errors.New("unmarshal feature not supported in legacy fulfillment")
 }
 
 var (
-	_ UnlockCondition = NilCondition{}
-	_ UnlockCondition = UnknownCondition{}
-	_ UnlockCondition = UnlockHashCondition{}
-	_ UnlockCondition = AtomicSwapCondition{}
+	_ UnlockCondition = (*NilCondition)(nil)
+	_ UnlockCondition = (*UnknownCondition)(nil)
+	_ UnlockCondition = (*UnlockHashCondition)(nil)
+	_ UnlockCondition = (*AtomicSwapCondition)(nil)
 
-	_ UnlockFulfillment = NilFulfillment{}
-	_ UnlockFulfillment = UnknownFulfillment{}
-	_ UnlockFulfillment = SingleSignatureFulfillment{}
-	_ UnlockFulfillment = AtomicSwapFulfillment{}
-	_ UnlockFulfillment = LegacyAtomicSwapFulfillment{}
+	_ UnlockFulfillment = (*NilFulfillment)(nil)
+	_ UnlockFulfillment = (*UnknownFulfillment)(nil)
+	_ UnlockFulfillment = (*SingleSignatureFulfillment)(nil)
+	_ UnlockFulfillment = (*AtomicSwapFulfillment)(nil)
+	_ UnlockFulfillment = (*LegacyAtomicSwapFulfillment)(nil)
 )
+
+func (ct ConditionType) MarshalSia(w io.Writer) error {
+	_, err := w.Write([]byte{byte(ct)})
+	return err
+}
+
+func (ct *ConditionType) UnmarshalSia(r io.Reader) error {
+	var b [1]byte
+	_, err := r.Read(b[:])
+	*ct = ConditionType(b[0])
+	return err
+}
+
+func (ft FulfillmentType) MarshalSia(w io.Writer) error {
+	_, err := w.Write([]byte{byte(ft)})
+	return err
+}
+
+func (ft *FulfillmentType) UnmarshalSia(r io.Reader) error {
+	var b [1]byte
+	_, err := r.Read(b[:])
+	*ft = FulfillmentType(b[0])
+	return err
+}
 
 func strictSignatureCheck(pk SiaPublicKey, signature ByteSlice) error {
 	switch pk.Algorithm {
@@ -415,6 +471,185 @@ func strictSignatureCheck(pk SiaPublicKey, signature ByteSlice) error {
 		return errors.New("unrecognized public key type in transaction")
 	}
 }
+
+func (up UnlockConditionProxy) MarshalSia(w io.Writer) error {
+	encoder := encoding.NewEncoder(w)
+	if up.UnlockCondition == nil {
+		return encoder.EncodeAll(ConditionTypeNil, 0) // type + nil-slice
+	}
+	return encoding.NewEncoder(w).EncodeAll(
+		up.UnlockCondition.ConditionType(), up.UnlockCondition.Marshal())
+}
+
+func (up *UnlockConditionProxy) UnmarshalSia(r io.Reader) error {
+	var (
+		t  ConditionType
+		rc []byte
+	)
+	err := encoding.NewDecoder(r).DecodeAll(&t, &rc)
+	if err != nil {
+		return err
+	}
+	cc, ok := _RegisteredUnlockConditionConstructors[t]
+	if !ok {
+		up.UnlockCondition = &UnknownCondition{
+			Type:         t,
+			RawCondition: rc,
+		}
+		return nil
+	}
+	c := cc()
+	err = c.Unmarshal(rc)
+	up.UnlockCondition = c
+	return err
+}
+
+func (fp UnlockFulfillmentProxy) MarshalSia(w io.Writer) error {
+	encoder := encoding.NewEncoder(w)
+	if fp.UnlockFulfillment == nil {
+		return encoder.EncodeAll(FulfillmentTypeNil, 0) // type + nil-slice
+	}
+	return encoding.NewEncoder(w).EncodeAll(
+		fp.UnlockFulfillment.FulfillmentType(), fp.UnlockFulfillment.Marshal())
+}
+
+func (fp *UnlockFulfillmentProxy) UnmarshalSia(r io.Reader) error {
+	var (
+		t  FulfillmentType
+		rf []byte
+	)
+	err := encoding.NewDecoder(r).DecodeAll(&t, &rf)
+	if err != nil {
+		return err
+	}
+	fc, ok := _RegisteredUnlockFulfillmentConstructors[t]
+	if !ok {
+		fp.UnlockFulfillment = &UnknownFulfillment{
+			Type:           t,
+			RawFulfillment: rf,
+		}
+		return nil
+	}
+	f := fc()
+	err = f.Unmarshal(rf)
+	fp.UnlockFulfillment = f
+	return err
+}
+
+var (
+	_ encoding.SiaMarshaler   = UnlockConditionProxy{}
+	_ encoding.SiaUnmarshaler = (*UnlockConditionProxy)(nil)
+
+	_ encoding.SiaMarshaler   = UnlockFulfillmentProxy{}
+	_ encoding.SiaUnmarshaler = (*UnlockFulfillmentProxy)(nil)
+)
+
+type unlockConditionJSONFormat struct {
+	Type ConditionType   `json:"type,omitempty"`
+	Data json.RawMessage `json:"data,omitempty"`
+}
+
+type unlockConditionJSONFormatWithNilData struct {
+	Type ConditionType `json:"type,omitempty"`
+}
+
+type unlockFulfillmentJSONFormat struct {
+	Type FulfillmentType `json:"type,omitempty"`
+	Data json.RawMessage `json:"data,omitempty"`
+}
+
+type unlockFulfillmentJSONFormatWithNilData struct {
+	Type FulfillmentType `json:"type,omitempty"`
+}
+
+func (up UnlockConditionProxy) MarshalJSON() ([]byte, error) {
+	if up.UnlockCondition == nil {
+		return json.Marshal(unlockConditionJSONFormat{
+			Type: ConditionTypeNil,
+			Data: nil,
+		})
+	}
+	data, err := json.Marshal(up.UnlockCondition)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	if string(data) == "{}" {
+		return json.Marshal(unlockConditionJSONFormatWithNilData{
+			Type: up.UnlockCondition.ConditionType(),
+		})
+	}
+	return json.Marshal(unlockConditionJSONFormat{
+		Type: up.UnlockCondition.ConditionType(),
+		Data: data,
+	})
+}
+
+func (up *UnlockConditionProxy) UnmarshalJSON(b []byte) error {
+	var rf unlockConditionJSONFormat
+	err := json.Unmarshal(b, &rf)
+	if err != nil {
+		return err
+	}
+	cc, ok := _RegisteredUnlockConditionConstructors[rf.Type]
+	if !ok {
+		return ErrUnknownConditionType
+	}
+	c := cc()
+	if rf.Data != nil {
+		err = json.Unmarshal(rf.Data, &c)
+	}
+	up.UnlockCondition = c
+	return err
+}
+
+func (fp UnlockFulfillmentProxy) MarshalJSON() ([]byte, error) {
+	if fp.UnlockFulfillment == nil {
+		return json.Marshal(unlockFulfillmentJSONFormat{
+			Type: FulfillmentTypeNil,
+			Data: nil,
+		})
+	}
+	data, err := json.Marshal(fp.UnlockFulfillment)
+	if err != nil {
+		return nil, err
+	}
+	if string(data) == "{}" {
+		return json.Marshal(unlockFulfillmentJSONFormatWithNilData{
+			Type: fp.UnlockFulfillment.FulfillmentType(),
+		})
+	}
+	return json.Marshal(unlockFulfillmentJSONFormat{
+		Type: fp.UnlockFulfillment.FulfillmentType(),
+		Data: data,
+	})
+}
+
+func (fp *UnlockFulfillmentProxy) UnmarshalJSON(b []byte) error {
+	var rf unlockFulfillmentJSONFormat
+	err := json.Unmarshal(b, &rf)
+	if err != nil {
+		return err
+	}
+	fc, ok := _RegisteredUnlockFulfillmentConstructors[rf.Type]
+	if !ok {
+		return ErrUnknownFulfillmentType
+	}
+	f := fc()
+	if rf.Data != nil {
+		err = json.Unmarshal(rf.Data, &f)
+	}
+	fp.UnlockFulfillment = f
+	return err
+}
+
+var (
+	_ json.Marshaler   = UnlockConditionProxy{}
+	_ json.Unmarshaler = (*UnlockConditionProxy)(nil)
+
+	_ json.Marshaler   = UnlockFulfillmentProxy{}
+	_ json.Unmarshaler = (*UnlockFulfillmentProxy)(nil)
+)
 
 // TODO: can be removed?
 func signHashUsingSiaPublicKey(pk SiaPublicKey, inputIndex uint64, tx Transaction, key interface{}, extraObjects ...interface{}) ([]byte, error) {

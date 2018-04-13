@@ -57,7 +57,7 @@ func newLegacyTransaction(t Transaction) (lt legacyTransaction, err error) {
 	if l := len(t.CoinOutputs); l > 0 {
 		lt.Data.CoinOutputs = make([]legacyTransactionCoinOutput, l)
 		for i, co := range t.CoinOutputs {
-			uhc, ok := co.Condition.(UnlockHashCondition)
+			uhc, ok := co.Condition.(*UnlockHashCondition)
 			if !ok {
 				err = errors.New("only unlock hash conditions are supported for legacy transactions")
 				return
@@ -83,7 +83,7 @@ func newLegacyTransaction(t Transaction) (lt legacyTransaction, err error) {
 	if l := len(t.BlockStakeOutputs); l > 0 {
 		lt.Data.BlockStakeOutputs = make([]legacyTransactionBlockStakeOutput, l)
 		for i, bso := range t.BlockStakeOutputs {
-			uhc, ok := bso.Condition.(UnlockHashCondition)
+			uhc, ok := bso.Condition.(*UnlockHashCondition)
 			if !ok {
 				err = errors.New("only unlock hash conditions are supported for legacy transactions")
 				return
@@ -116,7 +116,7 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 		for i, lco := range lt.Data.CoinOutputs {
 			t.CoinOutputs[i] = CoinOutput{
 				Value: lco.Value,
-				Condition: UnlockHashCondition{
+				Condition: &UnlockHashCondition{
 					TargetUnlockHash: lco.UnlockHash,
 				},
 			}
@@ -137,7 +137,7 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 		for i, lco := range lt.Data.BlockStakeOutputs {
 			t.BlockStakeOutputs[i] = BlockStakeOutput{
 				Value: lco.Value,
-				Condition: UnlockHashCondition{
+				Condition: &UnlockHashCondition{
 					TargetUnlockHash: lco.UnlockHash,
 				},
 			}
@@ -150,10 +150,10 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 
 func (ilp legacyTransactionInputLockProxy) MarshalSia(w io.Writer) error {
 	switch tc := ilp.Fulfillment.(type) {
-	case SingleSignatureFulfillment:
+	case *SingleSignatureFulfillment:
 		return encoding.NewEncoder(w).EncodeAll(UnlockTypeSingleSignature,
 			encoding.Marshal(tc.PublicKey), tc.Signature)
-	case LegacyAtomicSwapFulfillment:
+	case *LegacyAtomicSwapFulfillment:
 		return encoding.NewEncoder(w).EncodeAll(UnlockTypeAtomicSwap,
 			encoding.MarshalAll(tc.Sender, tc.Receiver, tc.HashedSecret, tc.TimeLock),
 			encoding.MarshalAll(tc.PublicKey, tc.Signature, tc.Secret))
@@ -179,7 +179,7 @@ func (ilp *legacyTransactionInputLockProxy) UnmarshalSia(r io.Reader) (err error
 			return
 		}
 
-		var ss SingleSignatureFulfillment
+		ss := new(SingleSignatureFulfillment)
 		err = encoding.Unmarshal(cb, &ss.PublicKey)
 		if err != nil {
 			return err
@@ -194,7 +194,7 @@ func (ilp *legacyTransactionInputLockProxy) UnmarshalSia(r io.Reader) (err error
 		if err != nil {
 			return
 		}
-		var as LegacyAtomicSwapFulfillment
+		as := new(LegacyAtomicSwapFulfillment)
 		err = encoding.UnmarshalAll(cb, &as.Sender, &as.Receiver, &as.HashedSecret, &as.TimeLock)
 		if err != nil {
 			return
@@ -229,7 +229,7 @@ func (ilp legacyTransactionInputLockProxy) MarshalJSON() ([]byte, error) {
 		out legacyJSONInputLockProxy
 	)
 	switch tc := ilp.Fulfillment.(type) {
-	case SingleSignatureFulfillment:
+	case *SingleSignatureFulfillment:
 		out.Type = UnlockTypeSingleSignature
 		out.Condition, err = json.Marshal(legacySingleSignatureCondition{tc.PublicKey})
 		if err != nil {
@@ -240,7 +240,7 @@ func (ilp legacyTransactionInputLockProxy) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 
-	case LegacyAtomicSwapFulfillment:
+	case *LegacyAtomicSwapFulfillment:
 		out.Type = UnlockTypeAtomicSwap
 		out.Condition, err = json.Marshal(AtomicSwapCondition{
 			Sender:       tc.Sender,
@@ -285,7 +285,7 @@ func (ilp *legacyTransactionInputLockProxy) UnmarshalJSON(b []byte) error {
 		if err != nil {
 			return err
 		}
-		ilp.Fulfillment = SingleSignatureFulfillment{
+		ilp.Fulfillment = &SingleSignatureFulfillment{
 			PublicKey: jc.PublicKey,
 			Signature: jf.Signature,
 		}
@@ -304,7 +304,7 @@ func (ilp *legacyTransactionInputLockProxy) UnmarshalJSON(b []byte) error {
 		if err != nil {
 			return err
 		}
-		ilp.Fulfillment = LegacyAtomicSwapFulfillment{
+		ilp.Fulfillment = &LegacyAtomicSwapFulfillment{
 			Sender:       jc.Sender,
 			Receiver:     jc.Receiver,
 			HashedSecret: jc.HashedSecret,

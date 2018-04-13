@@ -112,11 +112,11 @@ func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...inter
 	}
 	for _, ci := range t.CoinInputs {
 		switch cf := ci.Fulfillment.(type) {
-		case SingleSignatureFulfillment:
+		case *SingleSignatureFulfillment:
 			enc.EncodeAll(ci.ParentID,
 				NewUnlockHash(UnlockTypeSingleSignature,
 					crypto.HashObject(encoding.Marshal(cf.PublicKey))))
-		case LegacyAtomicSwapFulfillment:
+		case *LegacyAtomicSwapFulfillment:
 			enc.EncodeAll(ci.ParentID,
 				crypto.HashObject(encoding.MarshalAll(cf.Sender, cf.Receiver, cf.HashedSecret, cf.TimeLock)))
 		default:
@@ -128,11 +128,11 @@ func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...inter
 	enc.Encode(t.CoinOutputs)
 	for _, bsi := range t.BlockStakeInputs {
 		switch cf := bsi.Fulfillment.(type) {
-		case SingleSignatureFulfillment:
+		case *SingleSignatureFulfillment:
 			enc.EncodeAll(bsi.ParentID,
 				NewUnlockHash(UnlockTypeSingleSignature,
 					crypto.HashObject(encoding.Marshal(cf.PublicKey))))
-		case LegacyAtomicSwapFulfillment:
+		case *LegacyAtomicSwapFulfillment:
 			enc.EncodeAll(bsi.ParentID,
 				crypto.HashObject(encoding.MarshalAll(cf.Sender, cf.Receiver, cf.HashedSecret, cf.TimeLock)))
 		default:

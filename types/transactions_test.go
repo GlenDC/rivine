@@ -123,6 +123,7 @@ func TestTransactionVersionMarshaling(t *testing.T) {
 		HexEncodedVersion string
 	}{
 		{TransactionVersionZero, "00"},
+		{TransactionVersionOne, "01"},
 	}
 	for idx, testCase := range testCases {
 		buf := bytes.NewBuffer(nil)
@@ -172,7 +173,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
@@ -190,7 +191,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
@@ -202,7 +203,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(2),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
@@ -211,7 +212,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 					},
 					{
 						Value: NewCurrency64(3),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
@@ -228,7 +229,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
@@ -238,7 +239,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 					},
 					{
 						ParentID: CoinOutputID(hs("3300000000000000000000000000000000000000000000000000000000000033")),
-						Fulfillment: LegacyAtomicSwapFulfillment{
+						Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
@@ -261,7 +262,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(2),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
@@ -270,7 +271,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 					},
 					{
 						Value: NewCurrency64(3),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeAtomicSwap,
 								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
@@ -281,7 +282,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				BlockStakeInputs: []BlockStakeInput{
 					{
 						ParentID: BlockStakeOutputID(hs("4400000000000000000000000000000000000000000000000000000000000044")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
@@ -293,7 +294,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 				BlockStakeOutputs: []BlockStakeOutput{
 					{
 						Value: NewCurrency64(42),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
@@ -384,7 +385,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("def123def123def123def123def123def123def123def123def123def123def1"),
@@ -478,7 +479,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("abcdef012345abcdef012345abcdef012345abcdef012345abcdef012345abcd")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
@@ -488,7 +489,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 					},
 					{
 						ParentID: CoinOutputID(hs("012345defabc012345defabc012345defabc012345defabc012345defabc0123")),
-						Fulfillment: LegacyAtomicSwapFulfillment{
+						Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("654f96b317efe5fd6cd8ba1a394dce7b6ebe8c9621d6c44cbe3c8f1b58ce632a"),
@@ -511,7 +512,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				CoinOutputs: []CoinOutput{
 					{
 						Value: NewCurrency64(3),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("42e9458e348598111b0bc19bda18e45835605db9f4620616d752220ae8605ce0"),
@@ -520,7 +521,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 					},
 					{
 						Value: NewCurrency64(5),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeSingleSignature,
 								Hash: hs("a6a6c5584b2bfbd08738996cd7930831f958b9a5ed1595525236e861c1a0dc35"),
@@ -529,7 +530,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 					},
 					{
 						Value: NewCurrency64(8),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: UnlockTypeAtomicSwap,
 								Hash: hs("a24c97c80eeac111aa4bcbb0ac8ffc364fa9b22da10d3054778d2332f68b365e"),
@@ -540,7 +541,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				BlockStakeInputs: []BlockStakeInput{
 					{
 						ParentID: BlockStakeOutputID(hs("dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfd23dfde")),
-						Fulfillment: SingleSignatureFulfillment{
+						Fulfillment: &SingleSignatureFulfillment{
 							PublicKey: SiaPublicKey{
 								Algorithm: SignatureEd25519,
 								Key:       hbs("ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef1234ef12"),
@@ -552,7 +553,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				BlockStakeOutputs: []BlockStakeOutput{
 					{
 						Value: NewCurrency64(4),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: 100,
 								Hash: hs("53402d094ed0f336950c4be0feec37167aaaaf8b974d265900e49ab22773584c"),
@@ -561,7 +562,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 					},
 					{
 						Value: NewCurrency64(2),
-						Condition: UnlockHashCondition{
+						Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
 								Type: 42,
 								Hash: hs("b39baa9a58319fa47f78ed542a733a7198d106caeabf0a231b91ea3e4e222ffd"),
