@@ -279,6 +279,10 @@ func TestNilUnlockConditionProxy(t *testing.T) {
 	}
 }
 
+func TestEqual(t *testing.T) {
+	// TODO
+}
+
 func TestFulfill(t *testing.T) {
 	// TODO
 }

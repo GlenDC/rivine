@@ -16,6 +16,8 @@ type (
 	UnlockCondition interface {
 		ConditionType() ConditionType
 		IsStandardCondition() error
+
+		Equal(UnlockCondition) bool
 	}
 	MarshalableUnlockCondition interface {
 		UnlockCondition
@@ -26,6 +28,8 @@ type (
 
 	UnlockFulfillment interface {
 		Fulfill(condition interface{}, ctx FulfillContext) error
+
+		Equal(UnlockFulfillment) bool
 
 		FulfillmentType() FulfillmentType
 		IsStandardFulfillment() error
@@ -186,6 +190,11 @@ type (
 func (n *NilCondition) ConditionType() ConditionType { return ConditionTypeNil }
 func (n *NilCondition) IsStandardCondition() error   { return nil } // always valid
 
+func (n *NilCondition) Equal(c UnlockCondition) bool {
+	_, equal := c.(*NilCondition)
+	return equal
+}
+
 func (n *NilCondition) Marshal() []byte          { return nil } // nothing to marshal
 func (n *NilCondition) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
 
@@ -193,11 +202,27 @@ func (n *NilFulfillment) Fulfill(interface{}, FulfillContext) error { return nil
 func (n *NilFulfillment) FulfillmentType() FulfillmentType          { return FulfillmentTypeNil }
 func (n *NilFulfillment) IsStandardFulfillment() error              { return nil } // always valid
 
+func (n *NilFulfillment) Equal(f UnlockFulfillment) bool {
+	_, equal := f.(*NilFulfillment)
+	return equal
+}
+
 func (n *NilFulfillment) Marshal() []byte          { return nil } // nothing to marshal
 func (n *NilFulfillment) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
 
 func (u *UnknownCondition) ConditionType() ConditionType { return u.Type }
-func (u *UnknownCondition) IsStandardCondition() error   { return ErrUnknownUnlockType } // never valid
+func (u *UnknownCondition) IsStandardCondition() error   { return ErrUnknownConditionType } // never valid
+
+func (u *UnknownCondition) Equal(c UnlockCondition) bool {
+	uc, ok := c.(*UnknownCondition)
+	if !ok {
+		return false
+	}
+	if u.Type != uc.Type {
+		return false
+	}
+	return bytes.Compare(u.RawCondition[:], uc.RawCondition[:]) == 0
+}
 
 func (u *UnknownCondition) Marshal() []byte {
 	return u.RawCondition
@@ -213,6 +238,17 @@ func (u *UnknownCondition) Unmarshal(b []byte) error {
 func (u *UnknownFulfillment) Fulfill(interface{}, FulfillContext) error { return nil } // always fulfilled
 func (u *UnknownFulfillment) FulfillmentType() FulfillmentType          { return u.Type }
 func (u *UnknownFulfillment) IsStandardFulfillment() error              { return ErrUnknownUnlockType } // never valid
+
+func (u *UnknownFulfillment) Equal(f UnlockFulfillment) bool {
+	uf, ok := f.(*UnknownFulfillment)
+	if !ok {
+		return false
+	}
+	if u.Type != uf.Type {
+		return false
+	}
+	return bytes.Compare(u.RawFulfillment[:], uf.RawFulfillment[:]) == 0
+}
 
 func (u *UnknownFulfillment) Marshal() []byte {
 	return u.RawFulfillment
@@ -234,6 +270,14 @@ func (uh *UnlockHashCondition) IsStandardCondition() error {
 		return errors.New("nil crypto hash cannot be used as unlock hash")
 	}
 	return nil
+}
+
+func (uh *UnlockHashCondition) Equal(c UnlockCondition) bool {
+	ouh, ok := c.(*UnlockHashCondition)
+	if !ok {
+		return false
+	}
+	return uh.TargetUnlockHash.Cmp(ouh.TargetUnlockHash) == 0
 }
 
 func (uh *UnlockHashCondition) Marshal() []byte {
@@ -278,6 +322,20 @@ func (ss *SingleSignatureFulfillment) IsStandardFulfillment() error {
 	return strictSignatureCheck(ss.PublicKey, ss.Signature)
 }
 
+func (ss *SingleSignatureFulfillment) Equal(f UnlockFulfillment) bool {
+	oss, ok := f.(*SingleSignatureFulfillment)
+	if !ok {
+		return false
+	}
+	if ss.PublicKey.Algorithm != oss.PublicKey.Algorithm {
+		return false
+	}
+	if bytes.Compare(ss.PublicKey.Key[:], oss.PublicKey.Key[:]) != 0 {
+		return false
+	}
+	return bytes.Compare(ss.Signature[:], oss.Signature[:]) == 0
+}
+
 func (ss *SingleSignatureFulfillment) Marshal() []byte {
 	return encoding.MarshalAll(ss.PublicKey, ss.Signature)
 }
@@ -297,6 +355,23 @@ func (as *AtomicSwapCondition) IsStandardCondition() error {
 		return errors.New("nil hashed secret not allowed")
 	}
 	return nil
+}
+
+func (as *AtomicSwapCondition) Equal(c UnlockCondition) bool {
+	oas, ok := c.(*AtomicSwapCondition)
+	if !ok {
+		return false
+	}
+	if as.TimeLock != oas.TimeLock {
+		return false
+	}
+	if bytes.Compare(as.HashedSecret[:], oas.HashedSecret[:]) != 0 {
+		return false
+	}
+	if as.Sender.Cmp(oas.Sender) != 0 {
+		return false
+	}
+	return as.Receiver.Cmp(oas.Receiver) == 0
 }
 
 func (as *AtomicSwapCondition) Marshal() []byte {
@@ -376,6 +451,23 @@ func (as *AtomicSwapFulfillment) Fulfill(condition interface{}, ctx FulfillConte
 func (as *AtomicSwapFulfillment) FulfillmentType() FulfillmentType { return FulfillmentTypeAtomicSwap }
 func (as *AtomicSwapFulfillment) IsStandardFulfillment() error {
 	return strictSignatureCheck(as.PublicKey, as.Signature)
+}
+
+func (as *AtomicSwapFulfillment) Equal(f UnlockFulfillment) bool {
+	oas, ok := f.(*AtomicSwapFulfillment)
+	if !ok {
+		return false
+	}
+	if as.PublicKey.Algorithm != oas.PublicKey.Algorithm {
+		return false
+	}
+	if bytes.Compare(as.PublicKey.Key[:], oas.PublicKey.Key[:]) != 0 {
+		return false
+	}
+	if bytes.Compare(as.Signature[:], oas.Signature[:]) != 0 {
+		return false
+	}
+	return bytes.Compare(as.Secret[:], oas.Secret[:]) == 0
 }
 
 func (as *AtomicSwapFulfillment) Marshal() []byte {
@@ -469,6 +561,35 @@ func (as *LegacyAtomicSwapFulfillment) FulfillmentType() FulfillmentType {
 }
 func (as *LegacyAtomicSwapFulfillment) IsStandardFulfillment() error {
 	return strictSignatureCheck(as.PublicKey, as.Signature)
+}
+
+func (as *LegacyAtomicSwapFulfillment) Equal(f UnlockFulfillment) bool {
+	olas, ok := f.(*LegacyAtomicSwapFulfillment)
+	if !ok {
+		return false
+	}
+	if as.TimeLock != olas.TimeLock {
+		return false
+	}
+	if bytes.Compare(as.HashedSecret[:], olas.HashedSecret[:]) != 0 {
+		return false
+	}
+	if as.Sender.Cmp(olas.Sender) != 0 {
+		return false
+	}
+	if as.Receiver.Cmp(olas.Receiver) != 0 {
+		return false
+	}
+	if as.PublicKey.Algorithm != olas.PublicKey.Algorithm {
+		return false
+	}
+	if bytes.Compare(as.PublicKey.Key[:], olas.PublicKey.Key[:]) != 0 {
+		return false
+	}
+	if bytes.Compare(as.Signature[:], olas.Signature[:]) != 0 {
+		return false
+	}
+	return bytes.Compare(as.Secret[:], olas.Secret[:]) == 0
 }
 
 func (as *LegacyAtomicSwapFulfillment) Marshal() []byte {
@@ -590,6 +711,14 @@ func (up UnlockConditionProxy) IsStandardCondition() error {
 	return up.Condition.IsStandardCondition()
 }
 
+func (up UnlockConditionProxy) Equal(o UnlockCondition) bool {
+	condition := up.Condition
+	if condition == nil {
+		condition = &NilCondition{}
+	}
+	return condition.Equal(o)
+}
+
 func (fp UnlockFulfillmentProxy) Fulfill(condition interface{}, ctx FulfillContext) error {
 	if fp.Fulfillment == nil {
 		return nil // always fulfilled
@@ -609,6 +738,14 @@ func (fp UnlockFulfillmentProxy) IsStandardFulfillment() error {
 		return nil // nil-fulfillment is standard
 	}
 	return fp.Fulfillment.IsStandardFulfillment()
+}
+
+func (fp UnlockFulfillmentProxy) Equal(f UnlockFulfillment) bool {
+	fulfillment := fp.Fulfillment
+	if fulfillment == nil {
+		fulfillment = &NilFulfillment{}
+	}
+	return fulfillment.Equal(f)
 }
 
 func (up UnlockConditionProxy) MarshalSia(w io.Writer) error {

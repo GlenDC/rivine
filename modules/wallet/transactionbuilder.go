@@ -48,8 +48,14 @@ func (tb *transactionBuilder) FundCoins(amount types.Currency) error {
 	// Add all of the unconfirmed outputs as well.
 	for _, upt := range tb.wallet.unconfirmedProcessedTransactions {
 		for i, sco := range upt.Transaction.CoinOutputs {
+			// TODO: support conditions other than unlock hash conditions
+			// see: https://github.com/rivine/rivine/issues/275
+			uhc, ok := sco.Condition.Condition.(*types.UnlockHashCondition)
+			if !ok {
+				continue
+			}
 			// Determine if the output belongs to the wallet.
-			_, exists := tb.wallet.keys[sco.UnlockHash]
+			_, exists := tb.wallet.keys[uhc.TargetUnlockHash]
 			if !exists {
 				continue
 			}
@@ -86,8 +92,7 @@ func (tb *transactionBuilder) FundCoins(amount types.Currency) error {
 		// Add a coin input for this output.
 		sci := types.CoinInput{
 			ParentID: scoid,
-			Unlocker: types.NewSingleSignatureInputLock(
-				types.Ed25519PublicKey(tb.wallet.keys[sco.UnlockHash].PublicKey)),
+			// TODO: Fulfillment
 		}
 
 		tb.coinInputs = append(tb.coinInputs, len(tb.transaction.CoinInputs))
@@ -116,8 +121,10 @@ func (tb *transactionBuilder) FundCoins(amount types.Currency) error {
 			return err
 		}
 		refundOutput := types.CoinOutput{
-			Value:      fund.Sub(amount),
-			UnlockHash: refundUnlockHash,
+			Value: fund.Sub(amount),
+			Condition: types.UnlockConditionProxy{
+				Condition: &types.UnlockHashCondition{TargetUnlockHash: refundUnlockHash},
+			},
 		}
 		tb.transaction.CoinOutputs = append(tb.transaction.CoinOutputs, refundOutput)
 	}
@@ -156,8 +163,9 @@ func (tb *transactionBuilder) FundBlockStakes(amount types.Currency) error {
 
 		sfi := types.BlockStakeInput{
 			ParentID: sfoid,
-			Unlocker: types.NewSingleSignatureInputLock(
-				types.Ed25519PublicKey(tb.wallet.keys[sfo.UnlockHash].PublicKey)),
+			// TODO: fulfillment
+			//Unlocker: types.NewSingleSignatureInputLock(
+			//	types.Ed25519PublicKey(tb.wallet.keys[sfo.UnlockHash].PublicKey)),
 		}
 		tb.blockstakeInputs = append(tb.blockstakeInputs, len(tb.transaction.BlockStakeInputs))
 		tb.transaction.BlockStakeInputs = append(tb.transaction.BlockStakeInputs, sfi)
@@ -185,8 +193,12 @@ func (tb *transactionBuilder) FundBlockStakes(amount types.Currency) error {
 			return err
 		}
 		refundOutput := types.BlockStakeOutput{
-			Value:      fund.Sub(amount),
-			UnlockHash: refundUnlockHash,
+			Value: fund.Sub(amount),
+			Condition: types.UnlockConditionProxy{
+				Condition: &types.UnlockHashCondition{
+					TargetUnlockHash: refundUnlockHash,
+				},
+			},
 		}
 		tb.transaction.BlockStakeOutputs = append(tb.transaction.BlockStakeOutputs, refundOutput)
 	}
@@ -248,8 +260,9 @@ func (tb *transactionBuilder) SpendBlockStake(ubsoid types.BlockStakeOutputID) e
 
 	bsi := types.BlockStakeInput{
 		ParentID: ubsoid,
-		Unlocker: types.NewSingleSignatureInputLock(
-			types.Ed25519PublicKey(tb.wallet.keys[ubso.UnlockHash].PublicKey)),
+		// TODO: fulfillment
+		//Unlocker: types.NewSingleSignatureInputLock(
+		//	types.Ed25519PublicKey(tb.wallet.keys[ubso.UnlockHash].PublicKey)),
 	}
 	tb.blockstakeInputs = append(tb.blockstakeInputs, len(tb.transaction.BlockStakeInputs))
 	tb.transaction.BlockStakeInputs = append(tb.transaction.BlockStakeInputs, bsi)
@@ -318,24 +331,27 @@ func (tb *transactionBuilder) Sign() ([]types.Transaction, error) {
 	// signature.
 	tb.wallet.mu.Lock()
 	defer tb.wallet.mu.Unlock()
-	for _, inputIndex := range tb.coinInputs {
-		input := tb.transaction.CoinInputs[inputIndex]
-		key := tb.wallet.keys[input.Unlocker.UnlockHash()]
-		err := input.Unlocker.Lock(uint64(inputIndex), tb.transaction, key.SecretKey)
-		if err != nil {
-			return nil, err
+	// TODO: sign
+	/*
+		for _, inputIndex := range tb.coinInputs {
+			input := tb.transaction.CoinInputs[inputIndex]
+			key := tb.wallet.keys[input.Unlocker.UnlockHash()]
+			err := input.Unlocker.Lock(uint64(inputIndex), tb.transaction, key.SecretKey)
+			if err != nil {
+				return nil, err
+			}
+			tb.signed = true // Signed is set to true after one successful signature to indicate that future signings can cause issues.
 		}
-		tb.signed = true // Signed is set to true after one successful signature to indicate that future signings can cause issues.
-	}
-	for _, inputIndex := range tb.blockstakeInputs {
-		input := tb.transaction.BlockStakeInputs[inputIndex]
-		key := tb.wallet.keys[input.Unlocker.UnlockHash()]
-		err := input.Unlocker.Lock(uint64(inputIndex), tb.transaction, key.SecretKey)
-		if err != nil {
-			return nil, err
+		for _, inputIndex := range tb.blockstakeInputs {
+			input := tb.transaction.BlockStakeInputs[inputIndex]
+			key := tb.wallet.keys[input.Unlocker.UnlockHash()]
+			err := input.Unlocker.Lock(uint64(inputIndex), tb.transaction, key.SecretKey)
+			if err != nil {
+				return nil, err
+			}
+			tb.signed = true // Signed is set to true after one successful signature to indicate that future signings can cause issues.
 		}
-		tb.signed = true // Signed is set to true after one successful signature to indicate that future signings can cause issues.
-	}
+	*/
 
 	// Get the transaction set and delete the transaction from the registry.
 	txnSet := append(tb.parents, tb.transaction)

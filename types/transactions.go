@@ -177,7 +177,7 @@ type (
 		BlockStakeOutputID BlockStakeOutputID
 		Indexes            BlockStakeOutputIndexes
 		Value              Currency
-		UnlockHash         UnlockHash
+		Condition          UnlockConditionProxy
 	}
 
 	// BlockStakeOutputIndexes groups the block height, the transaction index and the output index to uniquely identify a blockstake output.
