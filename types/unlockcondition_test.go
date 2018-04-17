@@ -2,8 +2,10 @@ package types
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	mrand "math/rand"
 	"strings"
 	"testing"
 
@@ -278,14 +280,635 @@ func TestNilUnlockConditionProxy(t *testing.T) {
 	if b := encoding.Marshal(c); bytes.Compare(b, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0}) != 0 {
 		t.Error("MarshalSia", b)
 	}
+	if !c.Equal(nil) {
+		t.Error("should equal to nil implicitly")
+	}
+	if !c.Equal(&NilCondition{}) {
+		t.Error("should equal to nil explicitly")
+	}
+	if !c.Equal(UnlockConditionProxy{}) {
+		t.Error("should equal to nil explicitly")
+	}
+}
+
+func TestNilUnlockFulfillmentProxy(t *testing.T) {
+	var f UnlockFulfillmentProxy
+	if ft := f.FulfillmentType(); ft != FulfillmentTypeNil {
+		t.Error("FulfillmentType", ft, "!=", FulfillmentTypeNil)
+	}
+	if err := f.IsStandardFulfillment(); err != nil {
+		t.Error("IsStandardFulfillment", err)
+	}
+	if b, err := f.MarshalJSON(); err != nil || string(b) != "{}" {
+		t.Error("MarshalJSON", b, err)
+	}
+	if b := encoding.Marshal(f); bytes.Compare(b, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0}) != 0 {
+		t.Error("MarshalSia", b)
+	}
+	if !f.Equal(nil) {
+		t.Error("should equal to nil implicitly")
+	}
+	if !f.Equal(&NilFulfillment{}) {
+		t.Error("should equal to nil explicitly")
+	}
+	if !f.Equal(UnlockFulfillmentProxy{}) {
+		t.Error("should equal to nil explicitly")
+	}
 }
 
 func TestUnlockConditionEqual(t *testing.T) {
-	// TODO
+	testCases := []struct {
+		A, B            UnlockCondition
+		NotEqualMessage string
+	}{
+		{&NilCondition{}, nil, ""},             // implicit
+		{&NilCondition{}, &NilCondition{}, ""}, // explicit
+		{&NilCondition{}, &UnlockHashCondition{}, "unequal type"},
+		{&UnlockHashCondition{}, nil, "unequal type"},
+		{&UnlockHashCondition{}, &NilCondition{}, "unequal type"},
+		{&UnlockHashCondition{}, &AtomicSwapCondition{}, "unequal type"},
+		{&UnlockHashCondition{}, &UnlockHashCondition{}, ""},
+		{
+			&UnlockHashCondition{TargetUnlockHash: UnknownUnlockHash},
+			&UnlockHashCondition{TargetUnlockHash: NilUnlockHash},
+			"unequal crypto hash",
+		},
+		{
+			&UnlockHashCondition{TargetUnlockHash: NewUnlockHash(UnlockTypePubKey, crypto.Hash{})},
+			&UnlockHashCondition{TargetUnlockHash: NilUnlockHash},
+			"unequal unlock hash type",
+		},
+		{
+			&UnlockHashCondition{TargetUnlockHash: NewUnlockHash(UnlockTypePubKey, crypto.Hash{})},
+			&UnlockHashCondition{TargetUnlockHash: NewUnlockHash(UnlockTypePubKey, crypto.Hash{})},
+			"",
+		},
+		{
+			&UnlockHashCondition{TargetUnlockHash: unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893")},
+			&UnlockHashCondition{TargetUnlockHash: unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893")},
+			"",
+		},
+		{
+			&UnlockHashCondition{TargetUnlockHash: unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893")},
+			&UnlockHashCondition{TargetUnlockHash: unlockHashFromHex("02a24c97c80eeac111aa4bcbb0ac8ffc364fa9b22da10d3054778d2332f68b365e5e5af8e71541")},
+			"unequal unlock hash type",
+		},
+		{
+			&UnlockHashCondition{TargetUnlockHash: unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90")},
+			&UnlockHashCondition{TargetUnlockHash: unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893")},
+			"unequal crypto hash",
+		},
+		{&AtomicSwapCondition{}, nil, "unequal type"},
+		{&AtomicSwapCondition{}, &NilCondition{}, "unequal type"},
+		{&AtomicSwapCondition{}, &UnlockHashCondition{}, "unequal type"},
+		{&AtomicSwapCondition{}, &AtomicSwapCondition{}, ""},
+		{
+			&AtomicSwapCondition{
+				Sender: unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+			},
+			&AtomicSwapCondition{}, "unequal atomic swap conditions",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			"",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 4},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			"unequal hashed secret",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			"unequal receiver",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     0,
+			},
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			"unequal time lock",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			},
+			"unequal sender",
+		},
+	}
+	for idx, testCase := range testCases {
+		equal := testCase.A.Equal(testCase.B)
+		if testCase.NotEqualMessage != "" {
+			if equal {
+				t.Error(idx, "expected not equal, but it's equal:", testCase.NotEqualMessage, testCase.A, testCase.B)
+			}
+		} else {
+			if !equal {
+				t.Error(idx, "expected equal, but it's not equal", testCase.A, testCase.B)
+			}
+		}
+	}
 }
 
 func TestUnlockFulfillmentEqual(t *testing.T) {
-	// TODO
+	testCases := []struct {
+		A, B            UnlockFulfillment
+		NotEqualMessage string
+	}{
+		{&NilFulfillment{}, nil, ""},
+		{&NilFulfillment{}, &NilFulfillment{}, ""},
+		{&NilFulfillment{}, &SingleSignatureFulfillment{}, "unequal type"},
+		{&SingleSignatureFulfillment{}, nil, "unequal type"},
+		{&SingleSignatureFulfillment{}, &NilFulfillment{}, "unequal type"},
+		{&SingleSignatureFulfillment{}, &AtomicSwapFulfillment{}, "unequal type"},
+		{&SingleSignatureFulfillment{}, &LegacyAtomicSwapFulfillment{}, "unequal type"},
+		{&SingleSignatureFulfillment{}, &SingleSignatureFulfillment{}, ""},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			&SingleSignatureFulfillment{}, "different pub-key algorithm",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEntropy,
+				},
+			},
+			"different pub-key algorithm",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+			},
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			"different pub-key key",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 2},
+			},
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+			},
+			"different signature",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 2},
+			},
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 2},
+			},
+			"",
+		},
+		{&AtomicSwapFulfillment{}, nil, "unequal type"},
+		{&AtomicSwapFulfillment{}, &NilFulfillment{}, "unequal type"},
+		{&AtomicSwapFulfillment{}, &LegacyAtomicSwapFulfillment{}, "unequal type"},
+		{&AtomicSwapFulfillment{}, &SingleSignatureFulfillment{}, "unequal type"},
+		{&AtomicSwapFulfillment{}, &AtomicSwapFulfillment{}, ""},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			&AtomicSwapFulfillment{},
+			"different pub-key algo",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEntropy,
+				},
+			},
+			"different pub-key algo",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+			},
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			"different pub-key key",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+			},
+			"different signature",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			"different secret",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			"",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"",
+		},
+		{&LegacyAtomicSwapFulfillment{}, nil, "unequal type"},
+		{&LegacyAtomicSwapFulfillment{}, &NilFulfillment{}, "unequal type"},
+		{&LegacyAtomicSwapFulfillment{}, &SingleSignatureFulfillment{}, "unequal type"},
+		{&LegacyAtomicSwapFulfillment{}, &AtomicSwapFulfillment{}, "unequal type"},
+		{&LegacyAtomicSwapFulfillment{}, &LegacyAtomicSwapFulfillment{}, ""},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			&LegacyAtomicSwapFulfillment{},
+			"different pub-key algo",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEntropy,
+				},
+			},
+			"different pub-key algo",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+			},
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			"different pub-key key",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+			},
+			"different signature",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			"different secret",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+			},
+			"",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"different sender",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"different receiver",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     0,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"different time lock",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 2},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{4, 5, 6},
+				Secret:    AtomicSwapSecret{7, 8, 9},
+			},
+			"different hashed secret",
+		},
+	}
+	for idx, testCase := range testCases {
+		equal := testCase.A.Equal(testCase.B)
+		if testCase.NotEqualMessage != "" {
+			if equal {
+				t.Error(idx, "expected not equal, but it's equal:", testCase.NotEqualMessage, testCase.A, testCase.B)
+			}
+		} else {
+			if !equal {
+				t.Error(idx, "expected equal, but it's not equal", testCase.A, testCase.B)
+			}
+		}
+	}
 }
 
 func TestFulfillLegacyCompatibility(t *testing.T) {
@@ -480,10 +1103,775 @@ func TestFulfillLegacyCompatibility(t *testing.T) {
 	}
 }
 
+func TestValidFulFill(t *testing.T) {
+	// test public/private key pair
+	sk, pk := crypto.GenerateKeyPair()
+	ed25519pk := Ed25519PublicKey(pk)
+
+	// future time stamp
+	futureTimeStamp := CurrentTimestamp() + 123456
+
+	testCases := []signAndFulfillInput{
+		{ // nil -> nil
+			&NilCondition{},
+			func() MarshalableUnlockFulfillment { return &NilFulfillment{} },
+			nil,
+		},
+		{ // unlock hash -> single signature
+			&UnlockHashCondition{
+				TargetUnlockHash: NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+			},
+			func() MarshalableUnlockFulfillment {
+				return &SingleSignatureFulfillment{
+					PublicKey: ed25519pk,
+				}
+			},
+			sk,
+		},
+		{ // unknown -> unknown
+			&UnknownCondition{},
+			func() MarshalableUnlockFulfillment {
+				return &UnknownFulfillment{}
+			},
+			nil,
+		},
+		{ // nil -> unknown
+			&NilCondition{},
+			func() MarshalableUnlockFulfillment {
+				return &UnknownFulfillment{}
+			},
+			nil,
+		},
+		{ // unlock hash -> unknown
+			&UnlockHashCondition{
+				TargetUnlockHash: NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+			},
+			func() MarshalableUnlockFulfillment {
+				return &UnknownFulfillment{}
+			},
+			nil,
+		},
+		{ // [LEGACY] unlock hash -> atomic swap (refund)
+			&UnlockHashCondition{
+				TargetUnlockHash: (&AtomicSwapCondition{
+					Sender:       NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+					Receiver:     unlockHashFromHex("01437c56286c76dec14e87f5da5e5a436651006e6cd46bee5865c9060ba178f7296ed843b70a57"),
+					HashedSecret: NewAtomicSwapHashedSecret(AtomicSwapSecret{4, 2}),
+					TimeLock:     42, // we are waaaaay beyond this
+				}).UnlockHash(),
+			},
+			func() MarshalableUnlockFulfillment {
+				return &LegacyAtomicSwapFulfillment{
+					Sender:       NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+					Receiver:     unlockHashFromHex("01437c56286c76dec14e87f5da5e5a436651006e6cd46bee5865c9060ba178f7296ed843b70a57"),
+					HashedSecret: NewAtomicSwapHashedSecret(AtomicSwapSecret{4, 2}),
+					TimeLock:     42, // we are waaaaay beyond this
+					PublicKey:    ed25519pk,
+					Secret:       AtomicSwapSecret{}, // refund as claiming is impossible due to time lock
+					// Signature is set at signing step
+				}
+			},
+			sk,
+		},
+		{ // [LEGACY] unlock hash -> atomic swap (claim)
+			&UnlockHashCondition{
+				TargetUnlockHash: (&AtomicSwapCondition{
+					Receiver:     NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+					Sender:       unlockHashFromHex("01437c56286c76dec14e87f5da5e5a436651006e6cd46bee5865c9060ba178f7296ed843b70a57"),
+					HashedSecret: NewAtomicSwapHashedSecret(AtomicSwapSecret{4, 2}),
+					TimeLock:     futureTimeStamp,
+				}).UnlockHash(),
+			},
+			func() MarshalableUnlockFulfillment {
+				return &LegacyAtomicSwapFulfillment{
+					Receiver:     NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+					Sender:       unlockHashFromHex("01437c56286c76dec14e87f5da5e5a436651006e6cd46bee5865c9060ba178f7296ed843b70a57"),
+					HashedSecret: NewAtomicSwapHashedSecret(AtomicSwapSecret{4, 2}),
+					TimeLock:     futureTimeStamp,
+					PublicKey:    ed25519pk,
+					Secret:       AtomicSwapSecret{4, 2},
+					// Signature is set at signing step
+				}
+			},
+			sk,
+		},
+		{ // atomic swap -> atomic swap (refund)
+			&AtomicSwapCondition{
+				Sender:       NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+				Receiver:     unlockHashFromHex("01437c56286c76dec14e87f5da5e5a436651006e6cd46bee5865c9060ba178f7296ed843b70a57"),
+				HashedSecret: NewAtomicSwapHashedSecret(AtomicSwapSecret{4, 2}),
+				TimeLock:     42, // we are waaaaay beyond this
+			},
+			func() MarshalableUnlockFulfillment {
+				return &AtomicSwapFulfillment{
+					PublicKey: ed25519pk,
+					Secret:    AtomicSwapSecret{}, // refund as claiming is impossible due to time lock
+					// Signature is set at signing step
+				}
+			},
+			sk,
+		},
+		{ // atomic swap -> atomic swap (claim)
+			&AtomicSwapCondition{
+				Receiver:     NewUnlockHash(UnlockTypePubKey, crypto.HashObject(encoding.Marshal(ed25519pk))),
+				Sender:       unlockHashFromHex("01437c56286c76dec14e87f5da5e5a436651006e6cd46bee5865c9060ba178f7296ed843b70a57"),
+				HashedSecret: NewAtomicSwapHashedSecret(AtomicSwapSecret{4, 2}),
+				TimeLock:     futureTimeStamp,
+			},
+			func() MarshalableUnlockFulfillment {
+				return &AtomicSwapFulfillment{
+					PublicKey: ed25519pk,
+					Secret:    AtomicSwapSecret{4, 2},
+					// Signature is set at signing step
+				}
+			},
+			sk,
+		},
+	}
+	for idx, testCase := range testCases {
+		// test each testcase seperately
+		testValidSignAndFulfill(t, idx, []signAndFulfillInput{testCase})
+	}
+	// test all test cases at once
+	testValidSignAndFulfill(t, len(testCases), testCases)
+}
+
+type signAndFulfillInput struct {
+	Condition   MarshalableUnlockCondition
+	FulFillment func() MarshalableUnlockFulfillment
+	SignKey     interface{}
+}
+
+func testValidSignAndFulfill(t *testing.T, testIndex int, inputs []signAndFulfillInput) { // utility funcs
+	rhs := func() (hash crypto.Hash) { // random crypto hash
+		rand.Read(hash[:])
+		return
+	}
+
+	// create transaction
+	txn := Transaction{
+		Version:   TransactionVersionOne,
+		MinerFees: []Currency{NewCurrency64(1000 * 1000 * 100 * uint64(mrand.Int31n(100)+20))},
+		ArbitraryData: func() []byte {
+			b := make([]byte, mrand.Int31n(242)+14)
+			rand.Read(b[:])
+			return b
+		}(),
+	}
+
+	// add one coin input and blockstake input per input param
+	for idx, input := range inputs {
+		txn.CoinInputs = append(txn.CoinInputs, CoinInput{
+			ParentID: CoinOutputID(rhs()),
+			Fulfillment: UnlockFulfillmentProxy{
+				Fulfillment: input.FulFillment(),
+			},
+		})
+		txn.CoinOutputs = append(txn.CoinOutputs, CoinOutput{
+			Value: NewCurrency64(1000 * 1000 * 1000 * uint64(mrand.Int31n(100)+20)),
+			Condition: UnlockConditionProxy{
+				Condition: inputs[(idx+1)%len(inputs)].Condition,
+			},
+		})
+		txn.BlockStakeInputs = append(txn.BlockStakeInputs, BlockStakeInput{
+			ParentID: BlockStakeOutputID(rhs()),
+			Fulfillment: UnlockFulfillmentProxy{
+				Fulfillment: input.FulFillment(),
+			},
+		})
+		txn.BlockStakeOutputs = append(txn.BlockStakeOutputs, BlockStakeOutput{
+			Value: NewCurrency64(uint64(mrand.Int31n(100) + 20)),
+			Condition: UnlockConditionProxy{
+				Condition: inputs[(idx+2)%len(inputs)].Condition,
+			},
+		})
+	}
+
+	// sign all inputs (unless we are playing with unknown fulfillments)
+	for idx, input := range inputs {
+		if _, ok := txn.CoinInputs[idx].Fulfillment.Fulfillment.(*UnknownFulfillment); !ok {
+			signContext := FulfillmentSignContext{
+				InputIndex:  uint64(idx),
+				Transaction: txn,
+				Key:         input.SignKey,
+			}
+			err := txn.CoinInputs[idx].Fulfillment.Sign(signContext)
+			if err != nil {
+				t.Error(testIndex, idx, "signing coin input failed", err)
+			}
+			err = txn.BlockStakeInputs[idx].Fulfillment.Sign(signContext)
+			if err != nil {
+				t.Error(testIndex, idx, "signing block stake input failed", err)
+			}
+		}
+	}
+
+	// fulfill all inputs
+
+	for idx := range inputs {
+		fulfillContext := FulfillContext{
+			InputIndex:  uint64(idx),
+			BlockHeight: 0, // not important for now
+			Transaction: txn,
+		}
+		err := txn.CoinInputs[idx].Fulfillment.Fulfill(inputs[idx].Condition, fulfillContext)
+		if err != nil {
+			t.Error(testIndex, idx, "fulfilling coin input failed", err)
+		}
+		err = txn.BlockStakeInputs[idx].Fulfillment.Fulfill(inputs[idx].Condition, fulfillContext)
+		if err != nil {
+			t.Error(testIndex, idx, "fulfilling block stake input failed", err)
+		}
+	}
+}
+
 func TestIsStandardCondition(t *testing.T) {
-	// TODO
+	testCases := []struct {
+		Condition          UnlockCondition
+		NotStandardMessage string
+	}{
+		// nil conditions
+		{UnlockConditionProxy{}, ""},
+		{UnlockConditionProxy{Condition: &NilCondition{}}, ""},
+		{&NilCondition{}, ""},
+		// unknown condition
+		{&UnknownCondition{}, "unknown condition is never standard"},
+		{&UnknownCondition{Type: ConditionTypeUnlockHash}, "unknown condition is never standard"},
+		{&UnknownCondition{Type: ConditionTypeUnlockHash, RawCondition: []byte{1, 2, 3}}, "unknown condition is never standard"},
+		// unlock hash condition
+		{&UnlockHashCondition{}, "nil unlock type not allowed"},
+		{&UnlockHashCondition{TargetUnlockHash: UnlockHash{Type: 255}}, "non-standard unlock type not allowed"},
+		{&UnlockHashCondition{TargetUnlockHash: UnlockHash{Type: UnlockTypePubKey}}, "nil crypto hash not allowed"},
+		{&UnlockHashCondition{TargetUnlockHash: UnlockHash{Type: UnlockTypeAtomicSwap}}, "nil crypto hash not allowed"},
+		{&UnlockHashCondition{TargetUnlockHash: UnlockHash{Type: UnlockTypePubKey, Hash: crypto.Hash{1}}}, ""},
+		{&UnlockHashCondition{TargetUnlockHash: UnlockHash{Type: UnlockTypeAtomicSwap, Hash: crypto.Hash{1}}}, ""},
+		// atomic swap condition
+		{&AtomicSwapCondition{}, "nil atomic swap condition not allowed"},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("02a24c97c80eeac111aa4bcbb0ac8ffc364fa9b22da10d3054778d2332f68b365e5e5af8e71541"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			}, "receiver has unsupported unlock hash type",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("02a24c97c80eeac111aa4bcbb0ac8ffc364fa9b22da10d3054778d2332f68b365e5e5af8e71541"),
+				Receiver:     unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			}, "sender has unsupported unlock hash type",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			}, "empty/nil hashed secret not allowed",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{1, 2, 3},
+				TimeLock:     0,
+			}, "",
+		},
+		{
+			&AtomicSwapCondition{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+			}, "",
+		},
+	}
+	for idx, testCase := range testCases {
+		err := testCase.Condition.IsStandardCondition()
+		if testCase.NotStandardMessage != "" {
+			if err == nil {
+				t.Error(idx, "expected error, but none received:", testCase.NotStandardMessage, testCase.Condition)
+			}
+		} else {
+			if err != nil {
+				t.Error(idx, "expected no error but received one:", err, testCase.Condition)
+			}
+		}
+	}
 }
 
 func TestIsStandardFulfillment(t *testing.T) {
-	// TODO
+	testCases := []struct {
+		Fulfillment        UnlockFulfillment
+		NotStandardMessage string
+	}{
+		// nil fulfillment
+		{UnlockFulfillmentProxy{}, ""},
+		{UnlockFulfillmentProxy{Fulfillment: &NilFulfillment{}}, ""},
+		{&NilFulfillment{}, ""},
+		// unknown fulfillment
+		{&UnknownFulfillment{}, "unknown fulfillment is never standard"},
+		{&UnknownFulfillment{Type: FulfillmentTypeSingleSignature}, "unknown fulfillment is never standard"},
+		{&UnknownFulfillment{Type: FulfillmentTypeSingleSignature, RawFulfillment: []byte{1, 2, 3}}, "unknown fulfillment is never standard"},
+		// Single Signature
+		{&SingleSignatureFulfillment{}, "nil single signature fulfillment is not allowed"},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+			},
+			"nil pub-key + signature is not allowed for single-signature fulfilment",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"nil pub-key is not allowed for single-signature fulfilment",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+			},
+			"nil signature is not allowed for single-signature fulfilment",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{1, 2, 3},
+			},
+			"wrong signature size",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"wrong key size",
+		},
+		{
+			&SingleSignatureFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEntropy,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"non-standard signature size",
+		},
+		// Atomic Swap Fulfillment
+		{&AtomicSwapFulfillment{}, "nil atomic swap fulfillment not allowed"},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"wrong pub key size",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{1, 2, 3},
+			},
+			"wrong signature size",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEntropy,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"unsupported pub key algorithm",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"",
+		},
+		{
+			&AtomicSwapFulfillment{
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+				Secret: AtomicSwapSecret{1, 2, 3},
+			},
+			"",
+		},
+		// Legacy Atomic Swap Fulfillment
+		{&LegacyAtomicSwapFulfillment{}, "nil legacy atomic swap fulfillment not allowed"},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       UnlockHash{},
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"nil sender",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     UnlockHash{},
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"nil receiver",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"nil hashed secret",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEntropy,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"unsupported pub key algorithm",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key:       ByteSlice{1, 2, 3},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"wrong pub key size",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{1, 2, 3},
+			},
+			"wrong signature size",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+			},
+			"",
+		},
+		{
+			&LegacyAtomicSwapFulfillment{
+				Sender:       unlockHashFromHex("01746677df456546d93729066dd88514e2009930f3eebac3c93d43c88a108f8f9aa9e7c6f58893"),
+				Receiver:     unlockHashFromHex("015fe50b9c596d8717e5e7ba79d5a7c9c8b82b1427a04d5c0771268197c90e99dccbcdf0ba9c90"),
+				HashedSecret: AtomicSwapHashedSecret{4, 5, 6},
+				TimeLock:     DefaultChainConstants().GenesisTimestamp,
+				PublicKey: SiaPublicKey{
+					Algorithm: SignatureEd25519,
+					Key: ByteSlice{
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+						1, 2, 3, 4, 5, 6, 7, 8,
+					},
+				},
+				Signature: ByteSlice{
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+					1, 2, 3, 4, 5, 6, 7, 8,
+				},
+				Secret: AtomicSwapSecret{1, 2, 3},
+			},
+			"",
+		},
+	}
+	for idx, testCase := range testCases {
+		err := testCase.Fulfillment.IsStandardFulfillment()
+		if testCase.NotStandardMessage != "" {
+			if err == nil {
+				t.Error(idx, "expected error, but none received:", testCase.NotStandardMessage, testCase.Fulfillment)
+			}
+		} else {
+			if err != nil {
+				t.Error(idx, "expected no error but received one:", err, testCase.Fulfillment)
+			}
+		}
+	}
 }

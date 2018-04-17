@@ -2,7 +2,9 @@ package types
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,6 +96,8 @@ const (
 
 var (
 	ErrUnexpectedUnlockCondition = errors.New("unexpected unlock condition")
+
+	ErrFulfillmentDoubleSign = errors.New("cannot sign a fulfillment which is already signed")
 
 	// ErrUnknownUnlockType is an error returned in case
 	// one tries to use an input lock of unknown type where it's not supported
@@ -202,14 +206,23 @@ type (
 	}
 )
 
+// Errors related to atomic swaps
+var (
+	ErrInvalidPreImageSha256 = errors.New("invalid pre-image sha256")
+	ErrInvalidRedeemer       = errors.New("invalid input redeemer")
+)
+
 func (n *NilCondition) ConditionType() ConditionType { return ConditionTypeNil }
 func (n *NilCondition) IsStandardCondition() error   { return nil } // always valid
 
 func (n *NilCondition) UnlockHash() UnlockHash { return NilUnlockHash }
 
 func (n *NilCondition) Equal(c UnlockCondition) bool {
+	if c == nil {
+		return true // implicit equality
+	}
 	_, equal := c.(*NilCondition)
-	return equal
+	return equal // explicit equality
 }
 
 func (n *NilCondition) Marshal() []byte          { return nil } // nothing to marshal
@@ -226,8 +239,11 @@ func (n *NilFulfillment) Sign(FulfillmentSignContext) error { return nil } // th
 func (n *NilFulfillment) UnlockHash() UnlockHash { return NilUnlockHash }
 
 func (n *NilFulfillment) Equal(f UnlockFulfillment) bool {
+	if f == nil {
+		return true // implicit equality
+	}
 	_, equal := f.(*NilFulfillment)
-	return equal
+	return equal // explicit equality
 }
 
 func (n *NilFulfillment) FulfillmentType() FulfillmentType { return FulfillmentTypeNil }
@@ -345,6 +361,10 @@ func (ss *SingleSignatureFulfillment) Fulfill(condition UnlockCondition, ctx Ful
 }
 
 func (ss *SingleSignatureFulfillment) Sign(ctx FulfillmentSignContext) (err error) {
+	if len(ss.Signature) != 0 {
+		return ErrFulfillmentDoubleSign
+	}
+
 	ss.Signature, err = signHashUsingSiaPublicKey(
 		ss.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key)
 	return
@@ -449,8 +469,9 @@ func (as *AtomicSwapFulfillment) Fulfill(condition UnlockCondition, ctx FulfillC
 			}
 
 			// verify signature
-			err := verifyHashUsingSiaPublicKey(as.PublicKey,
-				ctx.InputIndex, ctx.Transaction, as.Signature, as.PublicKey, as.Secret)
+			err := verifyHashUsingSiaPublicKey(
+				as.PublicKey, ctx.InputIndex, ctx.Transaction, as.Signature,
+				as.PublicKey, as.Secret)
 			if err != nil {
 				return err
 			}
@@ -472,18 +493,35 @@ func (as *AtomicSwapFulfillment) Fulfill(condition UnlockCondition, ctx FulfillC
 
 		// after the deadline (timelock),
 		// only the original sender can reclaim the unspend output
-		return verifyHashUsingSiaPublicKey(as.PublicKey,
-			ctx.InputIndex, ctx.Transaction, as.Signature, as.PublicKey)
+		return verifyHashUsingSiaPublicKey(
+			as.PublicKey, ctx.InputIndex, ctx.Transaction, as.Signature,
+			as.PublicKey)
 
 	default:
 		return ErrUnexpectedUnlockCondition
 	}
 }
 
-func (as *AtomicSwapFulfillment) Sign(ctx FulfillmentSignContext) (err error) {
+func (as *AtomicSwapFulfillment) Sign(ctx FulfillmentSignContext) error {
+	if len(as.Signature) != 0 {
+		return ErrFulfillmentDoubleSign
+	}
+
+	if as.Secret != (AtomicSwapSecret{}) {
+		// sign as claimer
+		var err error
+		as.Signature, err = signHashUsingSiaPublicKey(
+			as.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key,
+			as.PublicKey, as.Secret)
+		return err
+	}
+
+	// sign as refunder
+	var err error
 	as.Signature, err = signHashUsingSiaPublicKey(
-		as.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key)
-	return
+		as.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key,
+		as.PublicKey)
+	return err
 }
 
 func (as *AtomicSwapFulfillment) UnlockHash() UnlockHash {
@@ -533,7 +571,7 @@ func (as *LegacyAtomicSwapFulfillment) Fulfill(condition UnlockCondition, ctx Fu
 		}
 
 		// create the unlockHash for the given public Key
-		unlockHash := NewSingleSignatureInputLock(as.PublicKey).UnlockHash()
+		unlockHash := NewSingleSignatureFulfillment(as.PublicKey).UnlockHash()
 
 		// prior to our timelock, only the receiver can claim the unspend output
 		if CurrentTimestamp() <= as.TimeLock {
@@ -543,8 +581,9 @@ func (as *LegacyAtomicSwapFulfillment) Fulfill(condition UnlockCondition, ctx Fu
 			}
 
 			// verify signature
-			err := verifyHashUsingSiaPublicKey(as.PublicKey,
-				ctx.InputIndex, ctx.Transaction, as.Signature, as.PublicKey, as.Secret)
+			err := verifyHashUsingSiaPublicKey(
+				as.PublicKey, ctx.InputIndex, ctx.Transaction, as.Signature,
+				as.PublicKey, as.Secret)
 			if err != nil {
 				return err
 			}
@@ -566,8 +605,9 @@ func (as *LegacyAtomicSwapFulfillment) Fulfill(condition UnlockCondition, ctx Fu
 
 		// after the deadline (timelock),
 		// only the original sender can reclaim the unspend output
-		return verifyHashUsingSiaPublicKey(as.PublicKey,
-			ctx.InputIndex, ctx.Transaction, as.Signature, as.PublicKey)
+		return verifyHashUsingSiaPublicKey(
+			as.PublicKey, ctx.InputIndex, ctx.Transaction, as.Signature,
+			as.PublicKey)
 
 	case *AtomicSwapCondition:
 		// it's perfectly fine to unlock an atomic swap condition
@@ -598,10 +638,30 @@ func (as *LegacyAtomicSwapFulfillment) Fulfill(condition UnlockCondition, ctx Fu
 	}
 }
 
-func (as *LegacyAtomicSwapFulfillment) Sign(ctx FulfillmentSignContext) (err error) {
+func (as *LegacyAtomicSwapFulfillment) Sign(ctx FulfillmentSignContext) error {
+	if len(as.Signature) != 0 {
+		return ErrFulfillmentDoubleSign
+	}
+	if as.Secret != (AtomicSwapSecret{}) {
+		if CurrentTimestamp() > as.TimeLock {
+			// cannot sign as claimer, when time lock has already been unlocked
+			return errors.New("atomic swap contract expired already")
+		}
+
+		// sign as claimer
+		var err error
+		as.Signature, err = signHashUsingSiaPublicKey(
+			as.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key,
+			as.PublicKey, as.Secret)
+		return err
+	}
+
+	// sign as refunder
+	var err error
 	as.Signature, err = signHashUsingSiaPublicKey(
-		as.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key)
-	return
+		as.PublicKey, ctx.InputIndex, ctx.Transaction, ctx.Key,
+		as.PublicKey)
+	return err
 }
 
 func (as *LegacyAtomicSwapFulfillment) UnlockHash() UnlockHash {
@@ -617,6 +677,15 @@ func (as *LegacyAtomicSwapFulfillment) FulfillmentType() FulfillmentType {
 	return FulfillmentTypeAtomicSwap
 }
 func (as *LegacyAtomicSwapFulfillment) IsStandardFulfillment() error {
+	if as.Sender.Type != UnlockTypePubKey || as.Receiver.Type != UnlockTypePubKey {
+		return errors.New("unsupported unlock hash type")
+	}
+	if as.Sender.Hash == (crypto.Hash{}) || as.Receiver.Hash == (crypto.Hash{}) {
+		return errors.New("nil crypto hash cannot be used as unlock hash")
+	}
+	if as.HashedSecret == (AtomicSwapHashedSecret{}) {
+		return errors.New("nil hashed secret not allowed")
+	}
 	return strictSignatureCheck(as.PublicKey, as.Signature)
 }
 
@@ -675,6 +744,91 @@ var (
 	_ MarshalableUnlockFulfillment = (*SingleSignatureFulfillment)(nil)
 	_ MarshalableUnlockFulfillment = (*AtomicSwapFulfillment)(nil)
 	_ MarshalableUnlockFulfillment = (*LegacyAtomicSwapFulfillment)(nil)
+)
+
+// NewAtomicSwapHashedSecret creates a new atomic swap hashed secret,
+// using a pre-generated atomic swap secret.
+func NewAtomicSwapHashedSecret(secret AtomicSwapSecret) AtomicSwapHashedSecret {
+	return AtomicSwapHashedSecret(sha256.Sum256(secret[:]))
+}
+
+// String turns this hashed secret into a hex-formatted string.
+func (hs AtomicSwapHashedSecret) String() string {
+	return hex.EncodeToString(hs[:])
+}
+
+// LoadString loads a hashed secret from a hex-formatted string.
+func (hs *AtomicSwapHashedSecret) LoadString(str string) error {
+	n, err := hex.Decode(hs[:], []byte(str))
+	if err != nil {
+		return err
+	}
+	if n != AtomicSwapHashedSecretLen {
+		return errors.New("invalid (atomic-swap) hashed secret length")
+	}
+	return nil
+}
+
+// MarshalJSON marshals a hashed secret as a hex string.
+func (hs AtomicSwapHashedSecret) MarshalJSON() ([]byte, error) {
+	return json.Marshal(hs.String())
+}
+
+// UnmarshalJSON decodes the json string of the hashed secret.
+func (hs *AtomicSwapHashedSecret) UnmarshalJSON(b []byte) error {
+	var str string
+	if err := json.Unmarshal(b, &str); err != nil {
+		return err
+	}
+	return hs.LoadString(str)
+}
+
+var (
+	_ json.Marshaler   = AtomicSwapHashedSecret{}
+	_ json.Unmarshaler = (*AtomicSwapHashedSecret)(nil)
+)
+
+// NewAtomicSwapSecret creates a new cryptographically secure
+// atomic swap secret
+func NewAtomicSwapSecret() (ass AtomicSwapSecret, err error) {
+	_, err = rand.Read(ass[:])
+	return
+}
+
+// String turns this secret into a hex-formatted string.
+func (s AtomicSwapSecret) String() string {
+	return hex.EncodeToString(s[:])
+}
+
+// LoadString loads a secret from a hex-formatted string.
+func (s *AtomicSwapSecret) LoadString(str string) error {
+	n, err := hex.Decode(s[:], []byte(str))
+	if err != nil {
+		return err
+	}
+	if n != AtomicSwapSecretLen {
+		return errors.New("invalid (atomic-swap) secret length")
+	}
+	return nil
+}
+
+// MarshalJSON marshals a secret as a hex string.
+func (s AtomicSwapSecret) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+// UnmarshalJSON decodes the json string of the secret.
+func (s *AtomicSwapSecret) UnmarshalJSON(b []byte) error {
+	var str string
+	if err := json.Unmarshal(b, &str); err != nil {
+		return err
+	}
+	return s.LoadString(str)
+}
+
+var (
+	_ json.Marshaler   = AtomicSwapSecret{}
+	_ json.Unmarshaler = (*AtomicSwapSecret)(nil)
 )
 
 func (as *anyAtomicSwapFulfillment) Unmarshal(b []byte) error {
@@ -784,12 +938,16 @@ func (up UnlockConditionProxy) Equal(o UnlockCondition) bool {
 	if condition == nil {
 		condition = &NilCondition{}
 	}
+	if p, ok := o.(UnlockConditionProxy); ok {
+		o = p.Condition
+	}
 	return condition.Equal(o)
 }
 
 func (fp UnlockFulfillmentProxy) Fulfill(condition UnlockCondition, ctx FulfillContext) error {
-	if fp.Fulfillment == nil || fp.Fulfillment.FulfillmentType() == FulfillmentTypeNil {
-		return errors.New("no fulfillment given while one is expected")
+	fulfillment := fp.Fulfillment
+	if fulfillment == nil {
+		fulfillment = &NilFulfillment{}
 	}
 	if p, ok := condition.(UnlockConditionProxy); ok {
 		condition = p.Condition
@@ -797,7 +955,7 @@ func (fp UnlockFulfillmentProxy) Fulfill(condition UnlockCondition, ctx FulfillC
 			condition = &NilCondition{}
 		}
 	}
-	return fp.Fulfillment.Fulfill(condition, ctx)
+	return fulfillment.Fulfill(condition, ctx)
 }
 
 func (fp UnlockFulfillmentProxy) Sign(ctx FulfillmentSignContext) error {
@@ -832,6 +990,9 @@ func (fp UnlockFulfillmentProxy) Equal(f UnlockFulfillment) bool {
 	fulfillment := fp.Fulfillment
 	if fulfillment == nil {
 		fulfillment = &NilFulfillment{}
+	}
+	if p, ok := f.(UnlockFulfillmentProxy); ok {
+		f = p.Fulfillment
 	}
 	return fulfillment.Equal(f)
 }
@@ -1021,7 +1182,7 @@ var (
 func strictSignatureCheck(pk SiaPublicKey, signature ByteSlice) error {
 	switch pk.Algorithm {
 	case SignatureEntropy:
-		return nil
+		return ErrEntropyKey
 	case SignatureEd25519:
 		if len(pk.Key) != crypto.PublicKeySize {
 			return errors.New("invalid public key size in transaction")

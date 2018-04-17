@@ -104,10 +104,6 @@ var (
 	}
 )
 
-func newContractUnlockHash(condition types.AtomicSwapCondition) types.UnlockHash {
-	return types.NewAtomicSwapInputLock(condition).UnlockHash()
-}
-
 func atomicswapparticipatecmd(dest, amount, hashedSecret string) {
 	var (
 		condition types.AtomicSwapCondition
@@ -334,7 +330,7 @@ func atomicswapauditcmdFast(expectedUH types.UnlockHash, condition types.AtomicS
 		Die("The given unlock has is not of the atomic swap (unlock) type!")
 	}
 
-	uh := types.NewAtomicSwapInputLock(condition).UnlockHash()
+	uh := condition.UnlockHash()
 	if expectedUH.Cmp(uh) != 0 {
 		Die("Invalid contract! Given contract information does NOT match the given unlock hash!")
 	}
@@ -677,11 +673,7 @@ func atomicswapclaimcmd(cmd *cobra.Command, args []string) {
 	err = txn.CoinInputs[0].Fulfillment.Sign(types.FulfillmentSignContext{
 		InputIndex:  0,
 		Transaction: txn,
-		Key: types.AtomicSwapClaimKey{
-			PublicKey: pk,     // our matching public key
-			SecretKey: sk,     // out matching secret key
-			Secret:    secret, // secret, matching output's defined hashed secret
-		},
+		Key:         sk,
 	})
 	if err != nil {
 		Die("Cannot claim atomic swap's locked coins! Couldn't sign transaction:", err)
@@ -804,12 +796,12 @@ func atomicswaprefundcmd(cmd *cobra.Command, args []string) {
 								HashedSecret: conditionRef.HashedSecret,
 								TimeLock:     conditionRef.TimeLock,
 								PublicKey:    pk,
-								Secret:       secret,
+								// secret not needed for refund
 							}
 						}
 						return &types.LegacyAtomicSwapFulfillment{
 							PublicKey: pk,
-							Secret:    secret,
+							// secret not needed for refund
 						}
 					}(),
 				},
@@ -832,11 +824,7 @@ func atomicswaprefundcmd(cmd *cobra.Command, args []string) {
 	err = txn.CoinInputs[0].Fulfillment.Sign(types.FulfillmentSignContext{
 		InputIndex:  0,
 		Transaction: txn,
-		Key: types.AtomicSwapRefundKey{
-			PublicKey: pk, // our matching public key
-			SecretKey: sk, // out matching secret key
-			// not secret is given or needed, as it's a refund
-		},
+		Key:         sk,
 	})
 	if err != nil {
 		Die("Cannot refund atomic swap's locked coins! Couldn't sign transaction:", err)
@@ -923,7 +911,7 @@ Contract value: %s`, _CurrencyConvertor.ToCoinStringWithUnit(hastings))
 Secret: %s`, secret)
 	}
 
-	cuh := types.NewAtomicSwapInputLock(condition).UnlockHash()
+	cuh := condition.UnlockHash()
 
 	fmt.Printf(`Contract address: %s%s
 Recipient address: %s

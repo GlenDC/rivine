@@ -26,7 +26,7 @@ var (
 	SignatureEntropy = Specifier{'e', 'n', 't', 'r', 'o', 'p', 'y'}
 	SignatureEd25519 = Specifier{'e', 'd', '2', '5', '5', '1', '9'}
 
-	ErrEntropyKey                = errors.New("transaction tries to sign an entproy public key")
+	ErrEntropyKey                = errors.New("transaction tries to use an entproy public key")
 	ErrFrivolousSignature        = errors.New("transaction contains a frivolous signature")
 	ErrInvalidPubKeyIndex        = errors.New("transaction contains a signature that points to a nonexistent public key")
 	ErrInvalidUnlockHashChecksum = errors.New("provided unlock hash has an invalid checksum")
