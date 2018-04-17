@@ -205,7 +205,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 						Value: NewCurrency64(2),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
 							},
 						}},
@@ -214,7 +214,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 						Value: NewCurrency64(3),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"),
 							},
 						}},
@@ -241,11 +241,11 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 						ParentID: CoinOutputID(hs("3300000000000000000000000000000000000000000000000000000000000033")),
 						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
 							},
 							Receiver: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("6363636363636363636363636363636363636363636363636363636363636363"),
 							},
 							HashedSecret: AtomicSwapHashedSecret(hs("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -264,7 +264,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 						Value: NewCurrency64(2),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
 							},
 						}},
@@ -296,7 +296,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 						Value: NewCurrency64(42),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
 							},
 						}},
@@ -491,11 +491,11 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 						ParentID: CoinOutputID(hs("012345defabc012345defabc012345defabc012345defabc012345defabc0123")),
 						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("654f96b317efe5fd6cd8ba1a394dce7b6ebe8c9621d6c44cbe3c8f1b58ce632a"),
 							},
 							Receiver: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("e89843e4b8231a01ba18b254d530110364432aafab8206bea72e5a20eaa55f70"),
 							},
 							HashedSecret: AtomicSwapHashedSecret(hs("abc543defabc543defabc543defabc543defabc543defabc543defabc543defa")),
@@ -514,7 +514,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 						Value: NewCurrency64(3),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("42e9458e348598111b0bc19bda18e45835605db9f4620616d752220ae8605ce0"),
 							},
 						}},
@@ -523,7 +523,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 						Value: NewCurrency64(5),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("a6a6c5584b2bfbd08738996cd7930831f958b9a5ed1595525236e861c1a0dc35"),
 							},
 						}},
@@ -899,42 +899,4 @@ func (t Transaction) LegacyBlockStakeOutputID(i uint64) BlockStakeOutputID {
 		t.ArbitraryData,
 		i,
 	))
-}
-
-func TestInputSigHashComputationCompatibleWithLegacyInputSigHash(t *testing.T) {
-	for idx, inputHexTxn := range legacyHexTestCases {
-		// sanity check to ensure our hex is valid
-		encodedTx, err := hex.DecodeString(inputHexTxn)
-		if err != nil {
-			t.Error(idx, err)
-			continue
-		}
-		var tx Transaction
-		err = tx.UnmarshalSia(bytes.NewReader(encodedTx))
-		if err != nil {
-			t.Error(idx, err)
-			continue
-		}
-
-		// compare inputSigHash
-		inputSigHashA, inputSigHashB :=
-			tx.InputSigHash(42, "foo"),
-			tx.legacyInputSigHash(42, "foo")
-		if bytes.Compare(inputSigHashA[:], inputSigHashB[:]) != 0 {
-			t.Error(idx, inputSigHashA, "!=", inputSigHashB)
-			continue
-		}
-
-		// now change it to something else than 0x00, but still without a custom inputSigHasher,
-		// even so it should give a different input signature hash, regardless of
-		tx.Version = TransactionVersionZero + 1
-		// compare ID, CoinOutputID and BlockStakeOutputID
-		// these should now be different
-		inputSigHashA, inputSigHashB =
-			tx.InputSigHash(42, "foo"),
-			tx.legacyInputSigHash(42, "foo")
-		if bytes.Compare(inputSigHashA[:], inputSigHashB[:]) == 0 {
-			t.Error(idx, inputSigHashA, "==", inputSigHashB)
-		}
-	}
 }

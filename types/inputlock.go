@@ -240,7 +240,7 @@ func (p InputLockProxy) MarshalJSON() ([]byte, error) {
 	case UnlockTypeNil:
 		// nothing to do related to condition and signature
 
-	case UnlockTypeSingleSignature:
+	case UnlockTypePubKey:
 		il := p.il.(*SingleSignatureInputLock)
 		rawInputLock.Condition, err = json.Marshal(singleSignatureCondition{
 			PublicKey: il.PublicKey,
@@ -296,7 +296,7 @@ func (p *InputLockProxy) UnmarshalJSON(b []byte) error {
 	case UnlockTypeNil:
 		p.il = nil
 
-	case UnlockTypeSingleSignature:
+	case UnlockTypePubKey:
 		var (
 			condition   singleSignatureCondition
 			fulfillment singleSignatureFulfillment
@@ -429,7 +429,7 @@ var (
 // NewSingleSignatureInputLock creates a new input lock,
 // using the given public key and signature.
 func NewSingleSignatureInputLock(pk SiaPublicKey) InputLockProxy {
-	return NewInputLockProxy(UnlockTypeSingleSignature,
+	return NewInputLockProxy(UnlockTypePubKey,
 		&SingleSignatureInputLock{PublicKey: pk})
 }
 
@@ -729,7 +729,7 @@ func UnregisterUnlockType(t UnlockType) {
 
 func init() {
 	// standard non-nil input locks
-	RegisterUnlockType(UnlockTypeSingleSignature, func() InputLock {
+	RegisterUnlockType(UnlockTypePubKey, func() InputLock {
 		return new(SingleSignatureInputLock)
 	})
 	RegisterUnlockType(UnlockTypeAtomicSwap, func() InputLock {

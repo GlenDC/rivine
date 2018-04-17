@@ -151,7 +151,7 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 func (ilp legacyTransactionInputLockProxy) MarshalSia(w io.Writer) error {
 	switch tc := ilp.Fulfillment.(type) {
 	case *SingleSignatureFulfillment:
-		return encoding.NewEncoder(w).EncodeAll(UnlockTypeSingleSignature,
+		return encoding.NewEncoder(w).EncodeAll(UnlockTypePubKey,
 			encoding.Marshal(tc.PublicKey), tc.Signature)
 	case *LegacyAtomicSwapFulfillment:
 		return encoding.NewEncoder(w).EncodeAll(UnlockTypeAtomicSwap,
@@ -172,7 +172,7 @@ func (ilp *legacyTransactionInputLockProxy) UnmarshalSia(r io.Reader) (err error
 		return
 	}
 	switch unlockType {
-	case UnlockTypeSingleSignature:
+	case UnlockTypePubKey:
 		var cb []byte
 		err = decoder.Decode(&cb)
 		if err != nil {
@@ -215,10 +215,10 @@ type (
 		Condition   json.RawMessage `json:"condition,omitempty"`
 		Fulfillment json.RawMessage `json:"fulfillment,omitempty"`
 	}
-	legacySingleSignatureCondition struct {
+	legacyJSONSingleSignatureCondition struct {
 		PublicKey SiaPublicKey `json:"publickey"`
 	}
-	legacySingleSignatureFulfillment struct {
+	legacyJSONSingleSignatureFulfillment struct {
 		Signature ByteSlice `json:"signature"`
 	}
 )
@@ -230,12 +230,12 @@ func (ilp legacyTransactionInputLockProxy) MarshalJSON() ([]byte, error) {
 	)
 	switch tc := ilp.Fulfillment.(type) {
 	case *SingleSignatureFulfillment:
-		out.Type = UnlockTypeSingleSignature
-		out.Condition, err = json.Marshal(legacySingleSignatureCondition{tc.PublicKey})
+		out.Type = UnlockTypePubKey
+		out.Condition, err = json.Marshal(legacyJSONSingleSignatureCondition{tc.PublicKey})
 		if err != nil {
 			return nil, err
 		}
-		out.Fulfillment, err = json.Marshal(legacySingleSignatureFulfillment{tc.Signature})
+		out.Fulfillment, err = json.Marshal(legacyJSONSingleSignatureFulfillment{tc.Signature})
 		if err != nil {
 			return nil, err
 		}
@@ -272,10 +272,10 @@ func (ilp *legacyTransactionInputLockProxy) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	switch in.Type {
-	case UnlockTypeSingleSignature:
+	case UnlockTypePubKey:
 		var (
-			jc legacySingleSignatureCondition
-			jf legacySingleSignatureFulfillment
+			jc legacyJSONSingleSignatureCondition
+			jf legacyJSONSingleSignatureFulfillment
 		)
 		err = json.Unmarshal(in.Condition, &jc)
 		if err != nil {

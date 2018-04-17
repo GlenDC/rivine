@@ -330,13 +330,13 @@ type (
 		// SendCoins is a tool for sending coins from the wallet to anyone who can fulfill the
 		// given condition (can be nil). The transaction is automatically given to the transaction pool, and
 		// are also returned to the caller.
-		SendCoins(amount types.Currency, cond types.MarshalableUnlockCondition, data []byte) (types.Transaction, error)
+		SendCoins(amount types.Currency, cond types.UnlockConditionProxy, data []byte) (types.Transaction, error)
 
 		// SendBlockStakes is a tool for sending blockstakes from the wallet to anyone who can fulfill the
 		// given condition (can be nil). Sending money usually results in multiple transactions. The
 		// transactions are automatically given to the transaction pool, and
 		// are also returned to the caller.
-		SendBlockStakes(amount types.Currency, cond types.MarshalableUnlockCondition) (types.Transaction, error)
+		SendBlockStakes(amount types.Currency, cond types.UnlockConditionProxy) (types.Transaction, error)
 
 		// SendOutputs is a tool for sending coins and block stakes from the wallet, to one or multiple addreses.
 		// The transaction is automatically given to the transaction pool, and is also returned to the caller.

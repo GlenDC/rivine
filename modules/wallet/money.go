@@ -61,10 +61,10 @@ func (w *Wallet) UnconfirmedBalance() (outgoingCoins types.Currency, incomingCoi
 // SendCoins creates a transaction sending 'amount' to whoever can fulfill the condition. If data is provided,
 // it is added as arbitrary data to the transaction. The transaction
 // is submitted to the transaction pool and is also returned.
-func (w *Wallet) SendCoins(amount types.Currency, cond types.MarshalableUnlockCondition, data []byte) (types.Transaction, error) {
+func (w *Wallet) SendCoins(amount types.Currency, cond types.UnlockConditionProxy, data []byte) (types.Transaction, error) {
 	return w.SendOutputs([]types.CoinOutput{
 		{
-			Condition: types.UnlockConditionProxy{Condition: cond},
+			Condition: cond,
 			Value:     amount,
 		},
 	}, nil, data)
@@ -72,10 +72,10 @@ func (w *Wallet) SendCoins(amount types.Currency, cond types.MarshalableUnlockCo
 
 // SendBlockStakes creates a transaction sending 'amount' to whoever can fulfill the condition. The transaction
 // is submitted to the transaction pool and is also returned.
-func (w *Wallet) SendBlockStakes(amount types.Currency, cond types.MarshalableUnlockCondition) (types.Transaction, error) {
+func (w *Wallet) SendBlockStakes(amount types.Currency, cond types.UnlockConditionProxy) (types.Transaction, error) {
 	return w.SendOutputs(nil, []types.BlockStakeOutput{
 		{
-			Condition: types.UnlockConditionProxy{Condition: cond},
+			Condition: cond,
 			Value:     amount,
 		},
 	}, nil)

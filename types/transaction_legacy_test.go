@@ -298,11 +298,11 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 						ParentID: CoinOutputID(hs("3300000000000000000000000000000000000000000000000000000000000033")),
 						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &LegacyAtomicSwapFulfillment{
 							Sender: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("1234567891234567891234567891234567891234567891234567891234567891"),
 							},
 							Receiver: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("6363636363636363636363636363636363636363636363636363636363636363"),
 							},
 							HashedSecret: AtomicSwapHashedSecret(hs("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -321,7 +321,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 						Value: NewCurrency64(2),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"),
 							},
 						}},
@@ -353,7 +353,7 @@ func TestLegacyTransactionToTransaction(t *testing.T) {
 						Value: NewCurrency64(42),
 						Condition: UnlockConditionProxy{Condition: &UnlockHashCondition{
 							TargetUnlockHash: UnlockHash{
-								Type: UnlockTypeSingleSignature,
+								Type: UnlockTypePubKey,
 								Hash: hs("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
 							},
 						}},

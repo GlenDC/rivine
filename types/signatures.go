@@ -78,16 +78,20 @@ func (t Transaction) InputSigHash(inputIndex uint64, extraObjects ...interface{}
 	h := crypto.NewHash()
 	enc := encoding.NewEncoder(h)
 
-	enc.Encode(t.Version)
+	enc.EncodeAll(
+		t.Version,
+		inputIndex,
+	)
 
-	enc.Encode(inputIndex)
 	if len(extraObjects) > 0 {
 		enc.EncodeAll(extraObjects...)
 	}
+	enc.Encode(len(t.CoinInputs))
 	for _, ci := range t.CoinInputs {
 		enc.Encode(ci.ParentID)
 	}
 	enc.Encode(t.CoinOutputs)
+	enc.Encode(len(t.BlockStakeInputs))
 	for _, bsi := range t.BlockStakeInputs {
 		enc.Encode(bsi.ParentID)
 	}
@@ -111,38 +115,28 @@ func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...inter
 		enc.EncodeAll(extraObjects...)
 	}
 	for _, ci := range t.CoinInputs {
-		switch cf := ci.Fulfillment.Fulfillment.(type) {
-		case *SingleSignatureFulfillment:
-			enc.EncodeAll(ci.ParentID,
-				NewUnlockHash(UnlockTypeSingleSignature,
-					crypto.HashObject(encoding.Marshal(cf.PublicKey))))
-		case *LegacyAtomicSwapFulfillment:
-			enc.EncodeAll(ci.ParentID,
-				crypto.HashObject(encoding.MarshalAll(cf.Sender, cf.Receiver, cf.HashedSecret, cf.TimeLock)))
-		default:
-			if build.DEBUG {
-				panic(fmt.Sprintf("unsupported fullfilment unlock type: %T", cf))
-			}
-		}
+		enc.EncodeAll(ci.ParentID, legacyUnlockHashFromFulfillment(ci.Fulfillment.Fulfillment))
 	}
-	enc.Encode(t.CoinOutputs)
+	// legacy transactions encoded unlock hashes in pure form
+	enc.Encode(len(t.CoinOutputs))
+	for _, co := range t.CoinOutputs {
+		enc.EncodeAll(
+			co.Value,
+			legacyUnlockHashCondition(co.Condition.Condition),
+		)
+	}
 	for _, bsi := range t.BlockStakeInputs {
-		switch cf := bsi.Fulfillment.Fulfillment.(type) {
-		case *SingleSignatureFulfillment:
-			enc.EncodeAll(bsi.ParentID,
-				NewUnlockHash(UnlockTypeSingleSignature,
-					crypto.HashObject(encoding.Marshal(cf.PublicKey))))
-		case *LegacyAtomicSwapFulfillment:
-			enc.EncodeAll(bsi.ParentID,
-				crypto.HashObject(encoding.MarshalAll(cf.Sender, cf.Receiver, cf.HashedSecret, cf.TimeLock)))
-		default:
-			if build.DEBUG {
-				panic(fmt.Sprintf("unsupported fullfilment unlock type: %T", cf))
-			}
-		}
+		enc.EncodeAll(bsi.ParentID, legacyUnlockHashFromFulfillment(bsi.Fulfillment.Fulfillment))
+	}
+	// legacy transactions encoded unlock hashes in pure form
+	enc.Encode(len(t.BlockStakeOutputs))
+	for _, bso := range t.BlockStakeOutputs {
+		enc.EncodeAll(
+			bso.Value,
+			legacyUnlockHashCondition(bso.Condition.Condition),
+		)
 	}
 	enc.EncodeAll(
-		t.BlockStakeOutputs,
 		t.MinerFees,
 		t.ArbitraryData,
 	)
@@ -150,6 +144,34 @@ func (t Transaction) legacyInputSigHash(inputIndex uint64, extraObjects ...inter
 	var hash crypto.Hash
 	h.Sum(hash[:0])
 	return hash
+}
+
+func legacyUnlockHashCondition(uc UnlockCondition) UnlockHash {
+	uhc, ok := uc.(*UnlockHashCondition)
+	if !ok {
+		if build.DEBUG {
+			panic(fmt.Sprintf("unexpected condition %[1]v (%[1]T) encountered", uc))
+		}
+		return NilUnlockHash
+	}
+	return uhc.TargetUnlockHash
+}
+
+func legacyUnlockHashFromFulfillment(uf UnlockFulfillment) UnlockHash {
+	switch tuf := uf.(type) {
+	case *SingleSignatureFulfillment:
+		return NewUnlockHash(UnlockTypePubKey,
+			crypto.HashObject(encoding.Marshal(tuf.PublicKey)))
+	case *LegacyAtomicSwapFulfillment:
+		return NewUnlockHash(UnlockTypePubKey,
+			crypto.HashObject(encoding.MarshalAll(
+				tuf.Sender, tuf.Receiver, tuf.HashedSecret, tuf.TimeLock)))
+	default:
+		if build.DEBUG {
+			panic(fmt.Sprintf("unexpected fulfillment %[1]v (%[1]T) encountered", uf))
+		}
+		return NilUnlockHash
+	}
 }
 
 // sortedUnique checks that 'elems' is sorted, contains no repeats, and that no
