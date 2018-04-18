@@ -151,10 +151,10 @@ func (lt legacyTransaction) Transaction() (t Transaction) {
 func (ilp legacyTransactionInputLockProxy) MarshalSia(w io.Writer) error {
 	switch tc := ilp.Fulfillment.(type) {
 	case *SingleSignatureFulfillment:
-		return encoding.NewEncoder(w).EncodeAll(UnlockTypePubKey,
+		return encoding.NewEncoder(w).EncodeAll(FulfillmentTypeSingleSignature,
 			encoding.Marshal(tc.PublicKey), tc.Signature)
 	case *LegacyAtomicSwapFulfillment:
-		return encoding.NewEncoder(w).EncodeAll(UnlockTypeAtomicSwap,
+		return encoding.NewEncoder(w).EncodeAll(FulfillmentTypeAtomicSwap,
 			encoding.MarshalAll(tc.Sender, tc.Receiver, tc.HashedSecret, tc.TimeLock),
 			encoding.MarshalAll(tc.PublicKey, tc.Signature, tc.Secret))
 	default:
