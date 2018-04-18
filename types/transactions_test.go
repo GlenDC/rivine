@@ -326,6 +326,19 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 			},
 		},
 		{
+			"0174000000000000000100000000000000110000000000000000000000000000000000000000000000000000000000001100000000000000000001000000000000000100000000000000090000000000000000000000000000000000000000000000000001000000000000000100000000000000030000000000000000",
+			Transaction{
+				Version: TransactionVersionOne,
+				CoinInputs: []CoinInput{
+					{ParentID: CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011"))},
+				},
+				CoinOutputs: []CoinOutput{
+					{Value: NewCurrency64(9)},
+				},
+				MinerFees: []Currency{NewCurrency64(3)},
+			},
+		},
+		{
 			"019c00000000000000010000000000000011000000000000000000000000000000000000000000000000000000000000112a15000000000000006d7920637573746f6d2066756c66696c6c6d656e7401000000000000000100000000000000032a13000000000000006d7920637573746f6d20636f6e646974696f6e0000000000000000000000000000000001000000000000000100000000000000040000000000000000",
 			Transaction{
 				Version: TransactionVersionOne,
@@ -778,6 +791,48 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 					NewCurrency64(1), NewCurrency64(2), NewCurrency64(3),
 				},
 				ArbitraryData: []byte("data"),
+			},
+		},
+		{
+			`{
+	"version": 1,
+	"data": {
+		"coininputs": [
+			{
+				"parentid": "1100000000000000000000000000000000000000000000000000000000000011",
+				"fulfillment": {}
+			}
+		],
+		"coinoutputs": [
+			{
+				"value": "9",
+				"condition": {}
+			}
+		],
+		"minerfees": [
+			"3"
+		]
+	}
+}`,
+			Transaction{
+				Version: TransactionVersionOne,
+				CoinInputs: []CoinInput{
+					{
+						ParentID: CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011")),
+						Fulfillment: UnlockFulfillmentProxy{
+							Fulfillment: &NilFulfillment{},
+						},
+					},
+				},
+				CoinOutputs: []CoinOutput{
+					{
+						Value: NewCurrency64(9),
+						Condition: UnlockConditionProxy{
+							Condition: &NilCondition{},
+						},
+					},
+				},
+				MinerFees: []Currency{NewCurrency64(3)},
 			},
 		},
 		{
