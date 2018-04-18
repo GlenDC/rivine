@@ -1875,3 +1875,175 @@ func TestIsStandardFulfillment(t *testing.T) {
 		}
 	}
 }
+
+func TestAtomicSwapHashedSecretStringify(t *testing.T) {
+	hexASHS := "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+	var hs AtomicSwapHashedSecret
+	err := hs.LoadString(hexASHS)
+	if err != nil {
+		t.Error("failed to load hashed secret in hash format:", err)
+	}
+	if bytes.Compare([]byte{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+		16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, hs[:]) != 0 {
+		t.Error("unexpected loaded hashed secret:", hs)
+	}
+
+	str := hs.String()
+	if str != hexASHS {
+		t.Error(str, "!=", hexASHS)
+	}
+
+	for i := 0; i < 64; i++ {
+		_, err := rand.Read(hs[:])
+		if err != nil {
+			t.Error(i, err)
+		}
+
+		str := hs.String()
+		if str == "" {
+			t.Error(i, "hex-encoded string is empty")
+		}
+
+		var hs2 AtomicSwapHashedSecret
+		err = hs2.LoadString(str)
+		if err != nil {
+			t.Error(i, "failed to load hashed secret in hash format:", err)
+		}
+
+		if bytes.Compare(hs2[:], hs[:]) != 0 {
+			t.Error(i, "unexpected loaded hashed secret:", hs2, "!=", hs)
+		}
+	}
+}
+
+func TestAtomicSwapHashedSecretJSON(t *testing.T) {
+	hexASHS := `"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"`
+	var hs AtomicSwapHashedSecret
+	err := hs.UnmarshalJSON([]byte(hexASHS))
+	if err != nil {
+		t.Error("failed to load hashed secret in hash format:", err)
+	}
+	if bytes.Compare([]byte{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+		16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, hs[:]) != 0 {
+		t.Error("unexpected loaded hashed secret:", hs)
+	}
+
+	b, err := hs.MarshalJSON()
+	if err != nil {
+		t.Error(err, b)
+	}
+	str := string(b)
+	if str != hexASHS {
+		t.Error(str, "!=", hexASHS)
+	}
+
+	for i := 0; i < 64; i++ {
+		_, err := rand.Read(hs[:])
+		if err != nil {
+			t.Error(i, err)
+		}
+
+		b, err := hs.MarshalJSON()
+		if err != nil || len(b) == 0 {
+			t.Error(i, "hex-encoded string is empty or an error occured", err, b)
+		}
+
+		var hs2 AtomicSwapHashedSecret
+		err = hs2.UnmarshalJSON(b)
+		if err != nil {
+			t.Error(i, "failed to load hashed secret in hex format:", err)
+		}
+
+		if bytes.Compare(hs2[:], hs[:]) != 0 {
+			t.Error(i, "unexpected loaded hashed secret:", hs2, "!=", hs)
+		}
+	}
+}
+
+func TestAtomicSwapSecretStringify(t *testing.T) {
+	hexASS := "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+	var s AtomicSwapSecret
+	err := s.LoadString(hexASS)
+	if err != nil {
+		t.Error("failed to load secret in hex format:", err)
+	}
+	if bytes.Compare([]byte{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+		16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, s[:]) != 0 {
+		t.Error("unexpected loaded secret:", s)
+	}
+
+	str := s.String()
+	if str != hexASS {
+		t.Error(str, "!=", hexASS)
+	}
+
+	for i := 0; i < 64; i++ {
+		_, err := rand.Read(s[:])
+		if err != nil {
+			t.Error(i, err)
+		}
+
+		str := s.String()
+		if str == "" {
+			t.Error(i, "hex-encoded string is empty")
+		}
+
+		var s2 AtomicSwapSecret
+		err = s2.LoadString(str)
+		if err != nil {
+			t.Error(i, "failed to load secret in hex format:", err)
+		}
+
+		if bytes.Compare(s2[:], s[:]) != 0 {
+			t.Error(i, "unexpected loaded secret:", s2, "!=", s)
+		}
+	}
+}
+
+func TestAtomicSwapSecretJSON(t *testing.T) {
+	hexASS := `"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"`
+	var s AtomicSwapSecret
+	err := s.UnmarshalJSON([]byte(hexASS))
+	if err != nil {
+		t.Error("failed to load secret in hash format:", err)
+	}
+	if bytes.Compare([]byte{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+		16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31}, s[:]) != 0 {
+		t.Error("unexpected loaded secret:", s)
+	}
+
+	b, err := s.MarshalJSON()
+	if err != nil {
+		t.Error(err, b)
+	}
+	str := string(b)
+	if str != hexASS {
+		t.Error(str, "!=", hexASS)
+	}
+
+	for i := 0; i < 64; i++ {
+		_, err := rand.Read(s[:])
+		if err != nil {
+			t.Error(i, err)
+		}
+
+		b, err := s.MarshalJSON()
+		if err != nil || len(b) == 0 {
+			t.Error(i, "hex-encoded string is empty or an error occured", err, b)
+		}
+
+		var s2 AtomicSwapHashedSecret
+		err = s2.UnmarshalJSON(b)
+		if err != nil {
+			t.Error(i, "failed to load secret in hex format:", err)
+		}
+
+		if bytes.Compare(s2[:], s[:]) != 0 {
+			t.Error(i, "unexpected loaded secret:", s2, "!=", s)
+		}
+	}
+}
