@@ -331,13 +331,19 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 			},
 		},
 		{
-			"0174000000000000000100000000000000110000000000000000000000000000000000000000000000000000000000001100000000000000000001000000000000000100000000000000090000000000000000000000000000000000000000000000000001000000000000000100000000000000030000000000000000",
+			"01f40000000000000001000000000000001100000000000000000000000000000000000000000000000000000000000011018000000000000000656432353531390000000000000000002000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff4000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01000000000000000100000000000000090000000000000000000000000000000000000000000000000001000000000000000100000000000000030000000000000000",
 			Transaction{
 				Version: TransactionVersionOne,
 				CoinInputs: []CoinInput{
 					{
-						ParentID:    CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011")),
-						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &NilFulfillment{}},
+						ParentID: CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011")),
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+							},
+							Signature: hbs("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+						}},
 					},
 				},
 				CoinOutputs: []CoinOutput{
@@ -812,7 +818,13 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 		"coininputs": [
 			{
 				"parentid": "1100000000000000000000000000000000000000000000000000000000000011",
-				"fulfillment": {}
+				"fulfillment": {
+					"type": 1,
+					"data": {
+						"publickey": "ed25519:def123def123def123def123def123def123def123def123def123def123def1",
+						"signature": "ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef"
+					}
+				}
 			}
 		],
 		"coinoutputs": [
@@ -831,9 +843,13 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011")),
-						Fulfillment: UnlockFulfillmentProxy{
-							Fulfillment: &NilFulfillment{},
-						},
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &SingleSignatureFulfillment{
+							PublicKey: SiaPublicKey{
+								Algorithm: SignatureEd25519,
+								Key:       hbs("def123def123def123def123def123def123def123def123def123def123def1"),
+							},
+							Signature: hbs("ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef12345ef"),
+						}},
 					},
 				},
 				CoinOutputs: []CoinOutput{
@@ -1295,7 +1311,7 @@ var legacyHexTestCases = []string{
 	`0002000000000000002200000000000000000000000000000000000000000000000000000000000022013800000000000000656432353531390000000000000000002000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff4000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff3300000000000000000000000000000000000000000000000000000000000033026a00000000000000011234567891234567891234567891234567891234567891234567891234567891016363636363636363636363636363636363636363636363636363636363636363bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb07edb85a00000000a000000000000000656432353531390000000000000000002000000000000000abababababababababababababababababababababababababababababababab4000000000000000dededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededabadabadabadabadabadabadabadabadabadabadabadabadabadabadabadaba020000000000000001000000000000000201cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc01000000000000000302dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01000000000000004400000000000000000000000000000000000000000000000000000000000044013800000000000000656432353531390000000000000000002000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee4000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee010000000000000001000000000000002a01abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd010000000000000001000000000000000102000000000000003432`,
 }
 
-func TestUnknownVersionBinaryEncoding(t *testing.T) { // TODO: fix broken test
+func TestUnknownVersionBinaryEncoding(t *testing.T) {
 	testCases := []string{
 		// transactions with unknown transaction versions
 		`2a170000000000000048656c6c6f2c20526177205472616e73616374696f6e21`,

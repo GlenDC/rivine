@@ -54,8 +54,6 @@ func TestUnlockConditionSiaEncoding(t *testing.T) {
 
 func TestUnlockFulfillmentSiaEncoding(t *testing.T) {
 	testCases := []string{
-		// nil fulfillment
-		`000000000000000000`,
 		// unknown fulfillment
 		`ff0c0000000000000048656c6c6f2c205465737421`,
 		// single signature fulfillment
@@ -296,8 +294,8 @@ func TestNilUnlockFulfillmentProxy(t *testing.T) {
 	if ft := f.FulfillmentType(); ft != FulfillmentTypeNil {
 		t.Error("FulfillmentType", ft, "!=", FulfillmentTypeNil)
 	}
-	if err := f.IsStandardFulfillment(); err != nil {
-		t.Error("IsStandardFulfillment", err)
+	if err := f.IsStandardFulfillment(); err == nil {
+		t.Error("IsStandardFulfillment should not be standard")
 	}
 	if b, err := f.MarshalJSON(); err != nil || string(b) != "{}" {
 		t.Error("MarshalJSON", b, err)
@@ -1112,10 +1110,14 @@ func TestValidFulFill(t *testing.T) {
 	futureTimeStamp := CurrentTimestamp() + 123456
 
 	testCases := []signAndFulfillInput{
-		{ // nil -> nil
+		{ // nil -> single signature
 			&NilCondition{},
-			func() MarshalableUnlockFulfillment { return &NilFulfillment{} },
-			nil,
+			func() MarshalableUnlockFulfillment {
+				return &SingleSignatureFulfillment{
+					PublicKey: ed25519pk,
+				}
+			},
+			sk,
 		},
 		{ // unlock hash -> single signature
 			&UnlockHashCondition{
@@ -1408,9 +1410,9 @@ func TestIsStandardFulfillment(t *testing.T) {
 		NotStandardMessage string
 	}{
 		// nil fulfillment
-		{UnlockFulfillmentProxy{}, ""},
-		{UnlockFulfillmentProxy{Fulfillment: &NilFulfillment{}}, ""},
-		{&NilFulfillment{}, ""},
+		{UnlockFulfillmentProxy{}, "nil fulfillment is never allowed"},
+		{UnlockFulfillmentProxy{Fulfillment: &NilFulfillment{}}, "nil fulfillment is never allowed"},
+		{&NilFulfillment{}, "nil fulfillment is never allowed"},
 		// unknown fulfillment
 		{&UnknownFulfillment{}, "unknown fulfillment is never standard"},
 		{&UnknownFulfillment{Type: FulfillmentTypeSingleSignature}, "unknown fulfillment is never standard"},

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rivine/rivine/build"
 	"github.com/rivine/rivine/crypto"
 	"github.com/rivine/rivine/encoding"
 )
@@ -148,8 +149,8 @@ var (
 )
 
 type (
-	NilCondition   struct{}
-	NilFulfillment struct{}
+	NilCondition   struct{} // can only be fulfilled by a SingleSignatureFulfillment
+	NilFulfillment struct{} // invalid fulfillment
 
 	UnknownCondition struct {
 		Type         ConditionType
@@ -228,15 +229,9 @@ func (n *NilCondition) Equal(c UnlockCondition) bool {
 func (n *NilCondition) Marshal() []byte          { return nil } // nothing to marshal
 func (n *NilCondition) Unmarshal(b []byte) error { return nil } // nothing to unmarshal
 
-func (n *NilFulfillment) Fulfill(condition UnlockCondition, ctx FulfillContext) error {
-	if _, ok := condition.(*NilCondition); ok || condition == nil {
-		return nil
-	}
-	return ErrUnexpectedUnlockCondition
-}
-func (n *NilFulfillment) Sign(FulfillmentSignContext) error { return nil } // there is nothing to sign
-
-func (n *NilFulfillment) UnlockHash() UnlockHash { return NilUnlockHash }
+func (n *NilFulfillment) Fulfill(UnlockCondition, FulfillContext) error { return ErrNilFulfillmentType }
+func (n *NilFulfillment) Sign(FulfillmentSignContext) error             { return ErrNilFulfillmentType }
+func (n *NilFulfillment) UnlockHash() UnlockHash                        { return NilUnlockHash }
 
 func (n *NilFulfillment) Equal(f UnlockFulfillment) bool {
 	if f == nil {
@@ -247,10 +242,15 @@ func (n *NilFulfillment) Equal(f UnlockFulfillment) bool {
 }
 
 func (n *NilFulfillment) FulfillmentType() FulfillmentType { return FulfillmentTypeNil }
-func (n *NilFulfillment) IsStandardFulfillment() error     { return nil } // always valid
+func (n *NilFulfillment) IsStandardFulfillment() error     { return ErrNilFulfillmentType } // never valid
 
-func (n *NilFulfillment) Marshal() []byte        { return nil } // nothing to marshal
-func (n *NilFulfillment) Unmarshal([]byte) error { return nil } // nothing to unmarshal
+func (n *NilFulfillment) Marshal() []byte {
+	if build.DEBUG {
+		panic(ErrNilFulfillmentType)
+	}
+	return nil // nothing to marshal
+}
+func (n *NilFulfillment) Unmarshal([]byte) error { return ErrNilFulfillmentType } // cannot be unmarshalled
 
 func (u *UnknownCondition) ConditionType() ConditionType { return u.Type }
 func (u *UnknownCondition) IsStandardCondition() error   { return ErrUnknownConditionType } // never valid
@@ -352,6 +352,10 @@ func (ss *SingleSignatureFulfillment) Fulfill(condition UnlockCondition, ctx Ful
 		if uh != tc.TargetUnlockHash {
 			return errors.New("fulfillment provides wrong public key")
 		}
+		return verifyHashUsingSiaPublicKey(ss.PublicKey,
+			ctx.InputIndex, ctx.Transaction, ss.Signature)
+
+	case *NilCondition, nil:
 		return verifyHashUsingSiaPublicKey(ss.PublicKey,
 			ctx.InputIndex, ctx.Transaction, ss.Signature)
 
@@ -913,24 +917,27 @@ func (ft *FulfillmentType) UnmarshalSia(r io.Reader) error {
 }
 
 func (up UnlockConditionProxy) ConditionType() ConditionType {
-	if up.Condition == nil {
-		return ConditionTypeNil
+	condition := up.Condition
+	if condition == nil {
+		condition = &NilCondition{}
 	}
-	return up.Condition.ConditionType()
+	return condition.ConditionType()
 }
 
 func (up UnlockConditionProxy) IsStandardCondition() error {
-	if up.Condition == nil {
-		return nil // nil-condition is standard
+	condition := up.Condition
+	if condition == nil {
+		condition = &NilCondition{}
 	}
-	return up.Condition.IsStandardCondition()
+	return condition.IsStandardCondition()
 }
 
 func (up UnlockConditionProxy) UnlockHash() UnlockHash {
-	if up.Condition == nil {
-		return NilUnlockHash
+	condition := up.Condition
+	if condition == nil {
+		condition = &NilCondition{}
 	}
-	return up.Condition.UnlockHash()
+	return condition.UnlockHash()
 }
 
 func (up UnlockConditionProxy) Equal(o UnlockCondition) bool {
@@ -959,31 +966,35 @@ func (fp UnlockFulfillmentProxy) Fulfill(condition UnlockCondition, ctx FulfillC
 }
 
 func (fp UnlockFulfillmentProxy) Sign(ctx FulfillmentSignContext) error {
-	if fp.Fulfillment == nil {
-		return (&NilFulfillment{}).Sign(ctx)
+	fulfillment := fp.Fulfillment
+	if fulfillment == nil {
+		fulfillment = &NilFulfillment{}
 	}
-	return fp.Fulfillment.Sign(ctx)
+	return fulfillment.Sign(ctx)
 }
 
 func (fp UnlockFulfillmentProxy) UnlockHash() UnlockHash {
-	if fp.Fulfillment == nil {
-		return NilUnlockHash
+	fulfillment := fp.Fulfillment
+	if fulfillment == nil {
+		fulfillment = &NilFulfillment{}
 	}
-	return fp.Fulfillment.UnlockHash()
+	return fulfillment.UnlockHash()
 }
 
 func (fp UnlockFulfillmentProxy) FulfillmentType() FulfillmentType {
-	if fp.Fulfillment == nil {
-		return FulfillmentTypeNil
+	fulfillment := fp.Fulfillment
+	if fulfillment == nil {
+		fulfillment = &NilFulfillment{}
 	}
-	return fp.Fulfillment.FulfillmentType()
+	return fulfillment.FulfillmentType()
 }
 
 func (fp UnlockFulfillmentProxy) IsStandardFulfillment() error {
-	if fp.Fulfillment == nil {
-		return nil // nil-fulfillment is standard
+	fulfillment := fp.Fulfillment
+	if fulfillment == nil {
+		fulfillment = &NilFulfillment{}
 	}
-	return fp.Fulfillment.IsStandardFulfillment()
+	return fulfillment.IsStandardFulfillment()
 }
 
 func (fp UnlockFulfillmentProxy) Equal(f UnlockFulfillment) bool {
