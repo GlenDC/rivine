@@ -14,9 +14,10 @@ import (
 )
 
 // TestTransactionIDs probes all of the ID functions of the Transaction type.
-func TestIDs(t *testing.T) { // TODO: FIX
+func TestIDs(t *testing.T) {
 	// Create every type of ID using empty fields.
 	txn := Transaction{
+		Version:           DefaultChainConstants().DefaultTransactionVersion,
 		CoinOutputs:       []CoinOutput{{}},
 		BlockStakeOutputs: []BlockStakeOutput{{}},
 	}
@@ -48,6 +49,7 @@ func TestIDs(t *testing.T) { // TODO: FIX
 func TestTransactionCoinOutputSum(t *testing.T) {
 	// Create a transaction with all types of coin outputs.
 	txn := Transaction{
+		Version: DefaultChainConstants().DefaultTransactionVersion,
 		CoinOutputs: []CoinOutput{
 			{Value: NewCurrency64(1)},
 			{Value: NewCurrency64(20)},
@@ -170,6 +172,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 		{
 			"0001000000000000002200000000000000000000000000000000000000000000000000000000000022013800000000000000656432353531390000000000000000002000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff4000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000000000000000000000000000000000000000000001000000000000000100000000000000010000000000000000",
 			Transaction{
+				Version: TransactionVersionZero,
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
@@ -188,6 +191,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 		{
 			"0001000000000000002200000000000000000000000000000000000000000000000000000000000022013800000000000000656432353531390000000000000000002000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff4000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff020000000000000001000000000000000201cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc01000000000000000301dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd0000000000000000000000000000000001000000000000000100000000000000010000000000000000",
 			Transaction{
+				Version: TransactionVersionZero,
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
@@ -226,6 +230,7 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 		{
 			"0002000000000000002200000000000000000000000000000000000000000000000000000000000022013800000000000000656432353531390000000000000000002000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff4000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff3300000000000000000000000000000000000000000000000000000000000033026a00000000000000011234567891234567891234567891234567891234567891234567891234567891016363636363636363636363636363636363636363636363636363636363636363bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb07edb85a00000000a000000000000000656432353531390000000000000000002000000000000000abababababababababababababababababababababababababababababababab4000000000000000dededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededededabadabadabadabadabadabadabadabadabadabadabadabadabadabadabadaba020000000000000001000000000000000201cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc01000000000000000302dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd01000000000000004400000000000000000000000000000000000000000000000000000000000044013800000000000000656432353531390000000000000000002000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee4000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee010000000000000001000000000000002a01abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd010000000000000001000000000000000102000000000000003432",
 			Transaction{
+				Version: TransactionVersionZero,
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("2200000000000000000000000000000000000000000000000000000000000022")),
@@ -330,10 +335,16 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 			Transaction{
 				Version: TransactionVersionOne,
 				CoinInputs: []CoinInput{
-					{ParentID: CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011"))},
+					{
+						ParentID:    CoinOutputID(hs("1100000000000000000000000000000000000000000000000000000000000011")),
+						Fulfillment: UnlockFulfillmentProxy{Fulfillment: &NilFulfillment{}},
+					},
 				},
 				CoinOutputs: []CoinOutput{
-					{Value: NewCurrency64(9)},
+					{
+						Value:     NewCurrency64(9),
+						Condition: UnlockConditionProxy{Condition: &NilCondition{}},
+					},
 				},
 				MinerFees: []Currency{NewCurrency64(3)},
 			},
@@ -536,7 +547,6 @@ func TestTransactionEncodingDocExamples(t *testing.T) {
 			t.Error(idx, err)
 			continue
 		}
-		continue
 
 		jms := func(v interface{}) string {
 			bs, _ := json.Marshal(v)
@@ -599,6 +609,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 	}
 }`,
 			Transaction{
+				Version: TransactionVersionZero,
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")),
@@ -693,6 +704,7 @@ func TestTransactionJSONEncodingExamples(t *testing.T) {
 	}
 }`,
 			Transaction{
+				Version: TransactionVersionZero,
 				CoinInputs: []CoinInput{
 					{
 						ParentID: CoinOutputID(hs("abcdef012345abcdef012345abcdef012345abcdef012345abcdef012345abcd")),
@@ -1391,7 +1403,7 @@ func TestUnknownVersionBinaryEncoding(t *testing.T) { // TODO: fix broken test
 
 // legacy test to ensure we're compatible with the old transaction ID computation logic
 // as that logic has changed since issue/feature #201
-func TestIDComputationCompatibleWithLegacyIDs(t *testing.T) { // TODO: fix broken test
+func TestIDComputationCompatibleWithLegacyIDs(t *testing.T) {
 	for idx, inputHexTxn := range legacyHexTestCases {
 		// sanity check to ensure our hex is valid
 		encodedTx, err := hex.DecodeString(inputHexTxn)
@@ -1502,4 +1514,18 @@ func (t Transaction) LegacyBlockStakeOutputID(i uint64) BlockStakeOutputID {
 		lt.Data.ArbitraryData,
 		i,
 	))
+}
+
+func TestIsValidTransactionVersion(t *testing.T) {
+	minVersion, maxVersion := TransactionVersion(0), TransactionVersion(1)
+	for v := minVersion; v <= maxVersion; v++ {
+		err := v.IsValidTransactionVersion()
+		if err != nil {
+			t.Error("unexpected invalid version", v, err)
+		}
+	}
+	err := (maxVersion + 1).IsValidTransactionVersion()
+	if err == nil {
+		t.Error("nknown version should be valid, while it is not:", maxVersion+1)
+	}
 }

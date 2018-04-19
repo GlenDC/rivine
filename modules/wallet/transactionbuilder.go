@@ -318,7 +318,9 @@ func (tb *transactionBuilder) Drop() {
 
 	tb.parents = nil
 	tb.signed = false
-	tb.transaction = types.Transaction{}
+	tb.transaction = types.Transaction{
+		Version: tb.wallet.chainCts.DefaultTransactionVersion,
+	}
 
 	tb.newParents = nil
 	tb.coinInputs = nil
@@ -433,5 +435,7 @@ func (w *Wallet) RegisterTransaction(t types.Transaction, parents []types.Transa
 // StartTransaction is a convenience function that calls
 // RegisterTransaction(types.Transaction{}, nil).
 func (w *Wallet) StartTransaction() modules.TransactionBuilder {
-	return w.RegisterTransaction(types.Transaction{}, nil)
+	return w.RegisterTransaction(types.Transaction{
+		Version: w.chainCts.DefaultTransactionVersion,
+	}, nil)
 }

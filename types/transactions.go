@@ -470,6 +470,18 @@ var (
 	_ encoding.SiaUnmarshaler = (*TransactionVersion)(nil)
 )
 
+// IsValidTransactionVersion returns an error in case the
+// transaction version is not 0, and isn't registered either.
+func (v TransactionVersion) IsValidTransactionVersion() error {
+	if v == TransactionVersionZero {
+		return nil
+	}
+	if _, ok := _RegisteredTransactionVersions[v]; ok {
+		return nil
+	}
+	return ErrInvalidTransactionVersion
+}
+
 // NewTransactionShortID creates a new Transaction ShortID,
 // combining a blockheight together with a transaction index.
 // See the TransactionShortID type for more information.

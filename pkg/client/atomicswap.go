@@ -635,6 +635,7 @@ func atomicswapclaimcmd(cmd *cobra.Command, args []string) {
 
 	// step 4: create a transaction
 	txn := types.Transaction{
+		Version: _DefaultTransactionVersion,
 		CoinInputs: []types.CoinInput{
 			{
 				ParentID: outputID,
@@ -784,6 +785,7 @@ func atomicswaprefundcmd(cmd *cobra.Command, args []string) {
 
 	// step 4: create a transaction
 	txn := types.Transaction{
+		Version: _DefaultTransactionVersion,
 		CoinInputs: []types.CoinInput{
 			{
 				ParentID: outputID,
