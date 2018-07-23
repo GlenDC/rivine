@@ -67,7 +67,19 @@ type WalletPersist struct {
 // overwriting the settings object in memory. loadSettings should only be
 // called at startup.
 func (w *Wallet) loadSettings() error {
-	return persist.LoadJSON(settingsMetadata, &w.persist, filepath.Join(w.persistDir, settingsFile))
+	err := persist.LoadJSON(settingsMetadata, &w.persist, filepath.Join(w.persistDir, settingsFile))
+	if err != nil {
+		return err
+	}
+	if len(w.persist.EncryptionVerification) == 0 {
+		err := w.subscribeWallet()
+		if err != nil {
+			return err
+		}
+		w.subscribed = true
+		w.unlocked = true
+	}
+	return nil
 }
 
 // saveSettings writes the wallet's settings to the wallet's settings file,

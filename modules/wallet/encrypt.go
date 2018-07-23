@@ -77,7 +77,7 @@ func (w *Wallet) initEncryption(masterKey crypto.TwofishKey, seed modules.Seed) 
 
 	// If the input key is blank, use the seed to create the master key.
 	// Otherwise, use the input key.
-	err := w.createSeed(masterKey, seed, preloadDepth)
+	err := w.createEncryptedSeed(masterKey, seed, preloadDepth)
 	if err != nil {
 		return modules.Seed{}, err
 	}
@@ -91,6 +91,42 @@ func (w *Wallet) initEncryption(masterKey crypto.TwofishKey, seed modules.Seed) 
 	if err != nil {
 		return modules.Seed{}, err
 	}
+	return seed, nil
+}
+
+// init initializes the wallet.
+// The primary seed can be given if it is known upfront,
+// but if a nil primary seed is given, a random one will be generated instead.
+func (w *Wallet) init(seed modules.Seed) (modules.Seed, error) {
+	// If no primary seed is given, create a random seed insead.
+	// Existing seeds get the full initial seed depth (PublicKeysPerSeed) (resulting in more addresses up front),
+	// compared to a new seed. This because an existing seed probably might have already addresses,
+	// outside the limited depth as identified by WalletSeedPreloadDepth.
+	preloadDepth := uint64(modules.PublicKeysPerSeed)
+	if seed == (modules.Seed{}) {
+		_, err := rand.Read(seed[:])
+		if err != nil {
+			return modules.Seed{}, err
+		}
+		preloadDepth = modules.WalletSeedPreloadDepth
+	}
+
+	// If the input key is blank, use the seed to create the master key.
+	// Otherwise, use the input key.
+	err := w.createSeed(seed, preloadDepth)
+	if err != nil {
+		return modules.Seed{}, err
+	}
+	// subscribe our wallet, no need for scanning as it is a new one
+	err = w.cs.ConsensusSetSubscribe(w, modules.ConsensusChangeRecent)
+	if err != nil {
+		return modules.Seed{}, errors.New("wallet subscription failed: " + err.Error())
+	}
+	go w.tpool.TransactionPoolSubscribe(w) // subscribe when possible
+	w.subscribed = true
+	// mark wallet as unlocked (as an unencrypted wallet is auto-unlocked)
+	// and return seed
+	w.unlocked = true
 	return seed, nil
 }
 
@@ -109,6 +145,16 @@ func (w *Wallet) managedUnlock(masterKey crypto.TwofishKey) error {
 			return errAlreadyUnlocked
 		}
 
+		if masterKey == (crypto.TwofishKey{}) {
+			// Load the wallet seed that is used to generate new addresses.
+			err := w.initPrimarySeed()
+			if err != nil {
+				return err
+			}
+			// Load all wallet seeds that are not used to generate new addresses.
+			return w.initAuxiliarySeeds()
+		}
+
 		// Check if the wallet encryption key has already been set.
 		if len(w.persist.EncryptionVerification) == 0 {
 			return errUnencryptedWallet
@@ -121,13 +167,13 @@ func (w *Wallet) managedUnlock(masterKey crypto.TwofishKey) error {
 		}
 
 		// Load the wallet seed that is used to generate new addresses.
-		err = w.initPrimarySeed(masterKey)
+		err = w.initEncryptedPrimarySeed(masterKey)
 		if err != nil {
 			return err
 		}
 
 		// Load all wallet seeds that are not used to generate new addresses.
-		return w.initAuxiliarySeeds(masterKey)
+		return w.initEncryptedAuxiliarySeeds(masterKey)
 	}()
 	if err != nil {
 		return err
@@ -136,28 +182,10 @@ func (w *Wallet) managedUnlock(masterKey crypto.TwofishKey) error {
 	// Subscribe to the consensus set if this is the first unlock for the
 	// wallet object.
 	if !subscribed {
-		// During rescan, print height every 3 seconds.
-		if build.Release != "testing" {
-			go func() {
-				println("Rescanning consensus set...")
-				for range time.Tick(time.Second * 3) {
-					w.mu.RLock()
-					height := w.consensusSetHeight
-					done := w.subscribed
-					w.mu.RUnlock()
-					if done {
-						println("\nDone!")
-						break
-					}
-					print("\rScanned to height ", height, "...")
-				}
-			}()
-		}
-		err = w.cs.ConsensusSetSubscribe(w, modules.ConsensusChangeBeginning)
+		err := w.subscribeWallet()
 		if err != nil {
-			return errors.New("wallet subscription failed: " + err.Error())
+			return err
 		}
-		w.tpool.TransactionPoolSubscribe(w)
 		w.mu.Lock()
 		w.subscribed = true
 		w.mu.Unlock()
@@ -166,6 +194,32 @@ func (w *Wallet) managedUnlock(masterKey crypto.TwofishKey) error {
 	w.mu.Lock()
 	w.unlocked = true
 	w.mu.Unlock()
+	return nil
+}
+
+func (w *Wallet) subscribeWallet() error {
+	// During rescan, print height every 3 seconds.
+	if build.Release != "testing" {
+		go func() {
+			println("Rescanning consensus set...")
+			for range time.Tick(time.Second * 3) {
+				w.mu.RLock()
+				height := w.consensusSetHeight
+				done := w.subscribed
+				w.mu.RUnlock()
+				if done {
+					println("\nDone!")
+					break
+				}
+				print("\rScanned to height ", height, "...")
+			}
+		}()
+	}
+	err := w.cs.ConsensusSetSubscribe(w, modules.ConsensusChangeBeginning)
+	if err != nil {
+		return errors.New("wallet subscription failed: " + err.Error())
+	}
+	go w.tpool.TransactionPoolSubscribe(w) // do when possible
 	return nil
 }
 
@@ -187,32 +241,28 @@ func (w *Wallet) wipeSecrets() {
 func (w *Wallet) Encrypted() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if build.DEBUG && w.unlocked && len(w.persist.EncryptionVerification) == 0 {
-		panic("wallet is both unlocked and unencrypted")
-	}
 	return len(w.persist.EncryptionVerification) != 0
 }
 
-// Encrypt will encrypt the wallet using the input key. Upon encryption, a
-// primary seed will be created for the wallet (no seed exists prior to this
-// point). If the key is blank, then the hash of the seed that is generated
-// will be used as the key. The wallet will still be locked after encryption.
+// Initialize can only be called once throughout the life of the wallet
+// and will return an error on subsequent calls (even after restarting
+// the wallet). To reset the wallet, the wallet files must be moved to
+// a different directory or deleted.
 //
-// Encrypt can only be called once throughout the life of the wallet, and will
-// return an error on subsequent calls (even after restarting the wallet). To
-// reset the wallet, the wallet files must be moved to a different directory or
-// deleted.
-//
-// If no primary seed is given (which is possible if a nil seed is passed as primary seed),
-// a random one will be generated for you.
-func (w *Wallet) Encrypt(masterKey crypto.TwofishKey, primarySeed modules.Seed) (modules.Seed, error) {
+// If a masterKey is given, it will be encrypted as well,
+// using the masterKEy as input key. If no seed is given, one
+// will be generated for you and returned when the initialization was successful.
+func (w *Wallet) Initialize(masterKey crypto.TwofishKey, primarySeed modules.Seed) (modules.Seed, error) {
 	if err := w.tg.Add(); err != nil {
 		return modules.Seed{}, err
 	}
 	defer w.tg.Done()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.initEncryption(masterKey, primarySeed)
+	if masterKey != (crypto.TwofishKey{}) {
+		return w.initEncryption(masterKey, primarySeed)
+	}
+	return w.init(primarySeed)
 }
 
 // Unlocked indicates whether the wallet is locked or unlocked.
@@ -227,9 +277,14 @@ func (w *Wallet) Unlocked() bool {
 func (w *Wallet) Lock() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
 	if !w.unlocked {
 		return modules.ErrLockedWallet
 	}
+	if len(w.persist.EncryptionVerification) == 0 {
+		return modules.ErrUnencryptedWallet
+	}
+
 	w.log.Println("INFO: Locking wallet.")
 
 	// Wipe all of the seeds and secret keys, they will be replaced upon
@@ -241,6 +296,8 @@ func (w *Wallet) Lock() error {
 
 // Unlock will decrypt the wallet seed and load all of the addresses into
 // memory.
+//
+// This method is only required for encrypted wallets.
 func (w *Wallet) Unlock(masterKey crypto.TwofishKey) error {
 	// By having the wallet's ThreadGroup track the Unlock method, we ensure
 	// that Unlock will never unlock the wallet once the ThreadGroup has been

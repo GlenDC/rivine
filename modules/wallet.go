@@ -44,6 +44,10 @@ var (
 	// ErrLockedWallet is returned when an action cannot be performed due to
 	// the wallet being locked.
 	ErrLockedWallet = errors.New("wallet must be unlocked before it can be used")
+
+	// ErrUnencryptedWallet is returned when a wallet, that doesn't support encryption,
+	// is attempted to be locked.
+	ErrUnencryptedWallet = errors.New("unencrypted wallets cannot be locked")
 )
 
 type (
@@ -221,24 +225,25 @@ type (
 	// EncryptionManager can encrypt, lock, unlock, and indicate the current
 	// status of the EncryptionManager.
 	EncryptionManager interface {
-		// Encrypt will encrypt the wallet using the input key. Upon
-		// encryption, a primary seed will be created for the wallet (no seed
-		// exists prior to this point). If the key is blank, then the hash of
-		// the seed that is generated will be used as the key.
-		//
-		// Encrypt can only be called once throughout the life of the wallet
+		// Initialize can only be called once throughout the life of the wallet
 		// and will return an error on subsequent calls (even after restarting
 		// the wallet). To reset the wallet, the wallet files must be moved to
 		// a different directory or deleted.
-		Encrypt(masterKey crypto.TwofishKey, primarySeed Seed) (Seed, error)
+		//
+		// If a masterKey is given, it will be encrypted as well,
+		// using the masterKEy as input key. If no seed is given, one
+		// will be generated for you and returned when the initialization was successful.
+		Initialize(masterKey crypto.TwofishKey, primarySeed Seed) (Seed, error)
 
 		// Encrypted returns whether or not the wallet has been encrypted yet.
-		// After being encrypted for the first time, the wallet can only be
-		// unlocked using the encryption password.
+		// After being encrypted for the first time, an encrypted wallet can only be
+		// unlocked using the encryption password. Unencrypted wallets always return true.
 		Encrypted() bool
 
 		// Lock deletes all keys in memory and prevents the wallet from being
 		// used to spend coins or extract keys until 'Unlock' is called.
+		//
+		// Only encrypted wallets can be locked.
 		Lock() error
 
 		// Unlock must be called before the wallet is usable. All wallets and
@@ -248,6 +253,8 @@ type (
 		//
 		// All items in the wallet are encrypted using different keys which are
 		// derived from the master key.
+		//
+		// This method is only required (and even possible) for encrypted wallets.
 		Unlock(masterKey crypto.TwofishKey) error
 
 		// Unlocked returns true if the wallet is currently unlocked, false

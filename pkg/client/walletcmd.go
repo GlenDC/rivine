@@ -253,6 +253,16 @@ by any of the keys in the wallet.`,
 	}
 )
 
+var (
+	walletInitCfg struct {
+		NoPassphrase bool
+	}
+
+	walletRecoverCfg struct {
+		NoPassphrase bool
+	}
+)
+
 // walletaddresscmd fetches a new address from the wallet that will be able to
 // receive coins.
 func walletaddresscmd() {
@@ -280,24 +290,33 @@ func walletaddressescmd() {
 func walletinitcmd() {
 	var er api.WalletInitPOST
 
-	fmt.Println("You have to provide a passphrase!")
+	if !walletInitCfg.NoPassphrase {
+		fmt.Println("You have to provide a passphrase!")
+	}
 	fmt.Println("If you have an existing mnemonic you can use the recover wallet command instead.")
 
-	passphrase, err := speakeasy.Ask("Wallet passphrase: ")
-	if err != nil {
-		Die("Reading passphrase failed:", err)
-	}
-	if passphrase == "" {
-		Die("passphrase is required and cannot be empty")
-	}
+	var (
+		passphrase string
+		err        error
+	)
 
-	repassphrase, err := speakeasy.Ask("Reenter passphrase: ")
-	if err != nil {
-		Die("Reading passphrase failed:", err)
-	}
+	if !walletInitCfg.NoPassphrase {
+		passphrase, err = speakeasy.Ask("Wallet passphrase: ")
+		if err != nil {
+			Die("Reading passphrase failed:", err)
+		}
+		if passphrase == "" {
+			Die("passphrase is required and cannot be empty")
+		}
 
-	if repassphrase != passphrase {
-		Die("Given passphrases do not match !!")
+		repassphrase, err := speakeasy.Ask("Reenter passphrase: ")
+		if err != nil {
+			Die("Reading passphrase failed:", err)
+		}
+
+		if repassphrase != passphrase {
+			Die("Given passphrases do not match !!")
+		}
 	}
 
 	qs := fmt.Sprintf("passphrase=%s", passphrase)
@@ -308,7 +327,9 @@ func walletinitcmd() {
 	}
 
 	fmt.Printf("Mnemonic of primary seed:\n%s\n\n", er.PrimarySeed)
-	fmt.Printf("Wallet encrypted with given passphrase\n")
+	if !walletInitCfg.NoPassphrase {
+		fmt.Printf("Wallet encrypted with given passphrase\n")
+	}
 }
 
 // walletrecovercmd encrypts the wallet with the given password,
@@ -316,24 +337,35 @@ func walletinitcmd() {
 func walletrecovercmd() {
 	var er api.WalletInitPOST
 
-	fmt.Println("You have to provide a passphrase and existing mnemonic!")
+	if walletInitCfg.NoPassphrase {
+		fmt.Println("You have to provide an existing mnemonic!")
+	} else {
+		fmt.Println("You have to provide a passphrase and existing mnemonic!")
+	}
 	fmt.Println("If you have no existing mnemonic use the init wallet command instead!")
 
-	passphrase, err := speakeasy.Ask("Wallet passphrase: ")
-	if err != nil {
-		Die("Reading passphrase failed:", err)
-	}
-	if passphrase == "" {
-		Die("passphrase is required and cannot be empty")
-	}
+	var (
+		passphrase string
+		err        error
+	)
 
-	repassphrase, err := speakeasy.Ask("Reenter passphrase: ")
-	if err != nil {
-		Die("Reading passphrase failed:", err)
-	}
+	if !walletInitCfg.NoPassphrase {
+		passphrase, err = speakeasy.Ask("Wallet passphrase: ")
+		if err != nil {
+			Die("Reading passphrase failed:", err)
+		}
+		if passphrase == "" {
+			Die("passphrase is required and cannot be empty")
+		}
 
-	if repassphrase != passphrase {
-		Die("Given passphrases do not match !!")
+		repassphrase, err := speakeasy.Ask("Reenter passphrase: ")
+		if err != nil {
+			Die("Reading passphrase failed:", err)
+		}
+
+		if repassphrase != passphrase {
+			Die("Given passphrases do not match !!")
+		}
 	}
 
 	mnemonic, err := speakeasy.Ask("Enter existing mnemonic to be used as primary seed: ")
@@ -358,7 +390,9 @@ func walletrecovercmd() {
 	}
 
 	fmt.Printf("Mnemonic of primary seed:\n%s\n\n", er.PrimarySeed)
-	fmt.Printf("Wallet encrypted with given passphrase\n")
+	if !walletInitCfg.NoPassphrase {
+		fmt.Printf("Wallet encrypted with given passphrase\n")
+	}
 }
 
 // Wwlletloadseedcmd adds a seed to the wallet's list of seeds
@@ -1101,4 +1135,14 @@ func walletsigntxn(txnjson string) {
 	}
 
 	json.NewEncoder(os.Stdout).Encode(txn)
+}
+
+func init() {
+	walletInitCmd.Flags().BoolVar(
+		&walletInitCfg.NoPassphrase, "no-passphrase", false,
+		"create an unencrypted (less secure) wallet")
+
+	walletRecoverCmd.Flags().BoolVar(
+		&walletRecoverCfg.NoPassphrase, "no-passphrase", false,
+		"recover seed into a new and unencrypted (less secure) wallet")
 }

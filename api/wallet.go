@@ -306,13 +306,10 @@ func (api *API) walletBackupHandler(w http.ResponseWriter, req *http.Request, _ 
 
 // walletInitHandler handles API calls to /wallet/init.
 func (api *API) walletInitHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// optional passphrase
 	passphrase := req.FormValue("passphrase")
-	if passphrase == "" {
-		WriteError(w, Error{"error when calling /wallet/init: passphrase is required"},
-			http.StatusUnauthorized)
-		return
-	}
 
+	// optional seed
 	seedStr := req.FormValue("seed")
 	var seed modules.Seed
 	if seedStr != "" {
@@ -325,8 +322,13 @@ func (api *API) walletInitHandler(w http.ResponseWriter, req *http.Request, _ ht
 		}
 	}
 
-	encryptionKey := crypto.TwofishKey(crypto.HashObject(passphrase))
-	seed, err := api.wallet.Encrypt(encryptionKey, seed)
+	// only use key, if the user defined one
+	var encryptionKey crypto.TwofishKey
+	if passphrase != "" {
+		encryptionKey = crypto.TwofishKey(crypto.HashObject(passphrase))
+	}
+
+	seed, err := api.wallet.Initialize(encryptionKey, seed)
 	if err != nil {
 		WriteError(w, Error{"error when calling /wallet/init: " + err.Error()}, http.StatusBadRequest)
 		return
